@@ -52,7 +52,14 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC", "PT"]
-ignore = ["B008"]  # FastAPI Depends() 默认参数是官方用法
+ignore = [
+    "B008",    # FastAPI Depends() 默认参数是官方用法
+    # 中文注释/docstring 里用全角标点（，：（））是正常需求。
+    # 这三条规则会把它们判成「有歧义字符」，对中文项目是纯噪音。
+    "RUF001",  # ambiguous-unicode-character-string
+    "RUF002",  # ambiguous-unicode-character-docstring
+    "RUF003",  # ambiguous-unicode-character-comment
+]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
