@@ -1,10 +1,40 @@
-.venv/
+# ---------- 通用 ----------
+.DS_Store
+Thumbs.db
+
+# ---------- IDE ----------
+.idea/
+*.iml
+*.iws
+
+# ---------- Python ----------
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.coverage
+.coverage.*
+htmlcov/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.coverage
-htmlcov/
+build/
+dist/
+
+# ---------- 虚拟环境（体积大且平台相关，绝不提交） ----------
+.venv/
+venv/
+env/
+
+# ---------- 环境变量与密钥（绝不提交！） ----------
 .env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ---------- 本地数据库 / 临时产物 ----------
 *.db
+*.sqlite3
+*.log
+tmp/
+_tmp/
