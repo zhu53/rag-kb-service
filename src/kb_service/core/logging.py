@@ -18,11 +18,29 @@ from kb_service.core.config import get_settings
 trace_id_ctx: ContextVar[str] = ContextVar("trace_id", default="-")
 
 _RESERVED = {
-    "name", "msg", "args", "levelname", "levelno", "pathname",
-    "filename", "module", "exc_info", "exc_text", "stack_info",
-    "lineno", "funcName", "created", "msecs", "relativeCreated",
-    "thread", "threadName", "processName", "process", "taskName",
-    "message", "asctime",
+    "name",
+    "msg",
+    "args",
+    "levelname",
+    "levelno",
+    "pathname",
+    "filename",
+    "module",
+    "exc_info",
+    "exc_text",
+    "stack_info",
+    "lineno",
+    "funcName",
+    "created",
+    "msecs",
+    "relativeCreated",
+    "thread",
+    "threadName",
+    "processName",
+    "process",
+    "taskName",
+    "message",
+    "asctime",
 }
 
 
@@ -75,8 +93,11 @@ class TraceMiddleware(BaseHTTPMiddleware):
         except Exception:
             logger.exception(
                 "request_failed",
-                extra={"method": request.method, "path": request.url.path,
-                       "duration_ms": round((time.perf_counter() - start) * 1000, 2)},
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "duration_ms": round((time.perf_counter() - start) * 1000, 2),
+                },
             )
             raise
         finally:

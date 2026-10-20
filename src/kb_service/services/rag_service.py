@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from uuid import UUID
 
 from kb_service.repositories.doc_repo import DocRepository
-from kb_service.schemas.chat import ChatSource, ChatResponse
+from kb_service.schemas.chat import ChatResponse, ChatSource
 from kb_service.services.kb_service import KBService
 
 

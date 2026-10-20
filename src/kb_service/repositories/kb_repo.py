@@ -31,7 +31,9 @@ class KBRepository:
     def get(self, kb_id: UUID) -> dict[str, Any] | None:
         return store.kbs.get(kb_id)
 
-    def list_by_owner(self, owner_id: UUID, offset: int, limit: int) -> tuple[list[dict[str, Any]], int]:
+    def list_by_owner(
+        self, owner_id: UUID, offset: int, limit: int
+    ) -> tuple[list[dict[str, Any]], int]:
         rows = [r for r in store.kbs.values() if r["owner_id"] == owner_id]
         rows.sort(key=lambda r: r["created_at"], reverse=True)
         return rows[offset : offset + limit], len(rows)
