@@ -53,5 +53,5 @@ class KBService:
         self.repo.delete(kb_id)
 
     def count_owned(self, user_id: UUID) -> int:
-        """统计当前用户拥有的知识库数量（含已归档）。。"""
+        """统计当前用户拥有的知识库数量。"""
         return self.repo.count_by_owner(user_id)
