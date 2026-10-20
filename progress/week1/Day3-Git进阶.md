@@ -1,6 +1,7 @@
 # Day3 · Git 进阶（3h）
 
 > **今天的目标不是"记住更多命令"，而是建立三件事**：
+>
 > 1. **分支是你自己的实验场** —— 任何改动先在分支上做，坏了一句话丢弃
 > 2. **提交历史是给别人看的** —— 一个提交只讲一件事，message 说清"为什么"
 > 3. **规范靠工具强制，不靠自觉** —— pre-commit 让不合规的代码根本提交不进去
@@ -152,6 +153,7 @@ git log --oneline -5
 ```
 
 你要看到类似（从上到下是最新到最旧）：
+
 ```
 xxx 算了改回去
 xxx 改一下措辞
@@ -185,10 +187,10 @@ squash def5678 改一下措辞
 squash ghi9012 算了改回去
 ```
 
-`edit`（或 `e`）= 停下来让我改这个提交
-`squash`（或 `s`）= 把这个提交合并到**上一个**提交里，message 也合并
-`reword`（或 `r`）= 只改 message，不改内容
-`drop`（或 `d`）= 删掉这个提交
+`edit`（或 `e`）= 停下来让我改这个提交  
+`squash`（或 `s`）= 把这个提交合并到**上一个**提交里，message 也合并  
+`reword`（或 `r`）= 只改 message，不改内容  
+`drop`（或 `d`）= 删掉这个提交  
 `fixup`（或 `f`）= 合并到上一个，**丢弃**这个的 message
 
 保存退出（vim 里是 `:wq`）。
@@ -253,12 +255,13 @@ error: could not apply abc1234... docs(kb): 补充计数方法说明
 
 **怎么读这个标记**（关键，昨天你就错在这里）：
 
-| 部分 | 含义 |
-|---|---|
-| `<<<<<<< HEAD` 到 `=======` 之间 | **当前分支（rebase 的目标，这里是 `main`）**的内容 |
-| `=======` 到 `>>>>>>> abc1234` 之间 | **正在被重放的那个提交**（你的分支改动）的内容 |
+| 部分                               | 含义                                        |
+| -------------------------------- | ----------------------------------------- |
+| `<<<<<<< HEAD` 到 `=======` 之间    | **当前分支（rebase 的目标，这里是 `main`）**&#x7684;内容 |
+| `=======` 到 `>>>>>>> abc1234` 之间 | **正在被重放的那个提交**（你的分支改动）的内容                 |
 
 > ⚠️ **在 rebase 里 `HEAD` 的含义和 merge 时是反的！**
+>
 > - **merge** 时：`HEAD` = 你当前所在的分支（比如 feat 分支）
 > - **rebase** 时：`HEAD` = 你 rebase 到的目标（比如 main），因为 git 在临时检出 main 再往上叠
 >
@@ -298,15 +301,16 @@ git reset --hard ORIG_HEAD  # 更暴力的回退（ORIG_HEAD 是 rebase 前的�
 
 ### 2.4 rebase vs merge：什么时候用哪个
 
-| | `git merge` | `git rebase` |
-|---|---|---|
-| 历史形态 | 保留分叉，产生 merge commit | 拉成一条直线 |
-| 是否改写历史 | 不改（只新增） | **改**（重新生成 commit hash） |
-| 能不能对已推送的分支用 | 能 | **不能**（会让别人历史混乱） |
-| 典型场景 | 合并到 main（保留"曾有一个分支"的事实） | 本地分支追平 main（把分叉抹平） |
-| 出问题怎么查 | `git log --graph` 一目了然 | 线性历史看不出"曾经并行" |
+|             | `git merge`             | `git rebase`            |
+| ----------- | ----------------------- | ----------------------- |
+| 历史形态        | 保留分叉，产生 merge commit    | 拉成一条直线                  |
+| 是否改写历史      | 不改（只新增）                 | **改**（重新生成 commit hash） |
+| 能不能对已推送的分支用 | 能                       | **不能**（会让别人历史混乱）        |
+| 典型场景        | 合并到 main（保留"曾有一个分支"的事实） | 本地分支追平 main（把分叉抹平）      |
+| 出问题怎么查      | `git log --graph` 一目了然  | 线性历史看不出"曾经并行"           |
 
 **一句口诀**：
+
 > **本地未推送 → rebase 让历史干净；已推送/共享 → merge 保平安。**
 
 - [ ] 我能说出"为什么不能对已 push 的公共分支做 rebase"
@@ -361,23 +365,25 @@ git stash push -u -m "含新文件"
 [可选的 footer：关联 issue / BREAKING CHANGE]
 ```
 
-| type | 用途 | 例子 |
-|---|---|---|
-| `feat` | 新功能 | `feat(kb): 新增统计接口` |
-| `fix` | 修 bug | `fix(auth): 修正 token 过期后返回 500` |
-| `docs` | 只改文档 | `docs(w1): 补 Day3 教材` |
-| `style` | 格式/空格，不影响逻辑 | `style: ruff format 全量格式化` |
-| `refactor` | 重构（不改外部行为） | `refactor(repo): Repository 改为实例持有 session` |
-| `test` | 加/改测试 | `test(kb): 补 split_text 边界用例` |
-| `chore` | 构建/工具/依赖 | `chore: 升级 ruff 到 0.17.1` |
-| `perf` | 性能优化 | `perf(query): 列表查询加索引` |
+| type       | 用途          | 例子                                          |
+| ---------- | ----------- | ------------------------------------------- |
+| `feat`     | 新功能         | `feat(kb): 新增统计接口`                          |
+| `fix`      | 修 bug       | `fix(auth): 修正 token 过期后返回 500`             |
+| `docs`     | 只改文档        | `docs(w1): 补 Day3 教材`                       |
+| `style`    | 格式/空格，不影响逻辑 | `style: ruff format 全量格式化`                  |
+| `refactor` | 重构（不改外部行为）  | `refactor(repo): Repository 改为实例持有 session` |
+| `test`     | 加/改测试       | `test(kb): 补 split_text 边界用例`               |
+| `chore`    | 构建/工具/依赖    | `chore: 升级 ruff 到 0.17.1`                   |
+| `perf`     | 性能优化        | `perf(query): 列表查询加索引`                      |
 
 **subject 写法**：
+
 - 用**动词原形开头**（中文就写"新增/修正/删除"），不用过去式
 - **不加句号**
 - **不超过 50 字**，超出说明你塞了太多事，应该拆提交
 
 **为什么要规范**（面试能说）：
+
 1. **工具链依赖它**：`semantic-release` / `standard-version` 按 type 自动算版本号（`feat` → minor，`fix` → patch，`BREAKING CHANGE` → major）并生成 changelog
 2. **`git log --grep` 能筛**：`git log --grep="^fix"` 一秒列出所有 bug 修复
 3. **code review 成本降低**：reviewer 看 type 就知道该重点看什么
@@ -426,6 +432,7 @@ git commit -m "docs(w1): 记录 Day3 分支与 rebase 练习"
 - `check-merge-conflict`：**拦住没解决的 `<<<<<<<` 冲突标记**
 - `detect-private-key`：拦住私钥
 
+
 ### 5.2 ⭐ 验收：故意提交违规代码，看它拦不拦
 
 **打开 `kb-service/src/kb_service/services/kb_service.py`，在文件末尾加这行**：
@@ -460,6 +467,7 @@ Found 2 errors (2 fixed, 0 remaining).
 ```bash
 git diff                        # 看 ruff 自动改了什么
 ```
+
 
 如果 ruff 把 `x=1` 改成 `x = 1` 还留着未使用变量，手动删掉那行，然后重新提交：
 
@@ -514,16 +522,18 @@ git status
 
 ### 5.4 常见问题
 
-**Q：pre-commit 跑得太慢？**
+**Q：pre-commit 跑得太慢？**  
 只在改动的文件上跑，所以日常很快。全量跑（`--all-files`）才慢。
 
 **Q：真的急需跳过怎么办？**
+
 ```bash
 git commit --no-verify -m "..."
 ```
+
 ⚠️ **但公司里这么做会被 review 打回**。跳过 hook 等于绕过团队约定，应该修代码而不是绕检查。
 
-**Q：hook 环境和项目环境是同一个吗？**
+**Q：hook 环境和项目环境是同一个吗？**  
 不是。pre-commit 会给每个 hook 建**独立的隔离环境**（在 `~/.cache/pre-commit`），避免不同项目的依赖打架。这也是它首次运行慢的原因。
 
 - [ ] 我知道 `--no-verify` 能跳过，但知道不该日常用
@@ -596,11 +606,12 @@ git push
 6. pre-commit hook 为什么给每个 hook 建独立环境？
 
 <details>
+
 <summary>答案（先自己答，再看）</summary>
 
 1. merge 保留分叉并产生 merge commit（不改历史）；rebase 把提交重放到目标分支顶端，形成直线，但**会重写 commit hash**。**绝对不能对已经 push 到共享分支的提交 rebase**——别人基于旧 hash 的工作会全部错乱。
-2. rebase 时：`<<<<<<< HEAD` 到 `=======` 之间是**目标分支（你 rebase 到的那个，比如 main）**的内容；`=======` 到 `>>>>>>>` 之间是**你正在被重放的提交（你的分支改动）**的内容。
-   **这和 merge 时是反的**：merge 时 `HEAD` = 你当前所在的分支，`>>>>>>>` = 被合并进来的分支。
+2. rebase 时：`<<<<<<< HEAD` 到 `=======` 之间是**目标分支（你 rebase 到的那个，比如 main）**&#x7684;内容；`=======` 到 `>>>>>>>` 之间是**你正在被重放的提交（你的分支改动）**&#x7684;内容。  
+   **这和 merge 时是反的**：merge 时 `HEAD` = 你当前所在的分支，`>>>>>>>` = 被合并进来的分支。  
    **实测验证（git 2.55）**：在 feat 分支上 `git rebase main` 后冲突文件显示
    ```
    <<<<<<< HEAD
@@ -609,7 +620,7 @@ git push
    FEAT_BRANCH_CONTENT      ← 重放侧 = 你的 feat 提交
    >>>>>>> 3984e9d (feat change)
    ```
-   结论：**rebase 里 HEAD 指向的是"目标分支"**。所以 `git checkout --ours` 在 rebase 时保留的是 main 的版本，不是你的——这正是最容易搞反的地方。
+   结论：**rebase 里 HEAD 指向的是"目标分支"**。所以 `git checkout --ours` 在 rebase 时保留的是 main 的版本，不是你的——这正是最容易搞反的地方。  
    **最稳的做法**：不看 `ours/theirs`，**手工编辑文件**留下想要的版本，再 `git add` + `git rebase --continue`。
 3. amend 会重新生成提交（新 hash），本地和远端历史分叉。直接 push 会被拒绝（non-fast-forward），必须 force push。而 force push 到共享分支会覆盖别人的提交。
 4. `--soft`：只移动 HEAD，改动留在**暂存区**（可直接 commit）；`--mixed`（默认）：移动 HEAD + 清空暂存区，改动留在**工作区**；`--hard`：移动 HEAD + 清空暂存区 + **丢弃工作区改动**（危险，数据可能找不回）。
