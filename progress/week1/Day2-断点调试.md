@@ -1,6 +1,6 @@
 # Day2 · 断点调试（PyCharm 版 · 3h）
 
-> **今天的目标只有一个**：让程序停在你想停的地方，看着变量一个个变化。
+> **今天的目标只有一个**：让程序停在你想停的地方，看着变量一个个变化。  
 > 学完这一天，你会第一次有"能看见程序内部"的感觉 —— 这是从"猜 bug"到"看 bug"的分水岭。
 >
 > ⚠️ 今天不写新功能，只练调试。所有改动最后都要还原。
@@ -16,9 +16,9 @@ PyCharm → File → Open → C:\Users\acer-pc\WorkBuddy\2026-10-20-08-44-29\pyt
 ```
 
 **打开仓库根，不是 kb-service 子目录。** 原因：
-- 你的 `.idea` 配置在根目录（PyCharm 已经把 `kb-service` 识别为 Python 模块）
-- 这样 `progress/`、`学习路线-24周.md` 都在项目里，随时能看
 
+- [ ] 你的 `.idea` 配置在根目录（PyCharm 已经把 `kb-service` 识别为 Python 模块）
+- [ ] 这样 `progress/`、`学习路线-24周.md` 都在项目里，随时能看
 - [ ] 左侧项目树顶部显示 `python-backend-roadmap`
 - [ ] 展开能看到 `kb-service`（蓝色文件夹图标 = 模块）、`progress`、`README.md`
 
@@ -34,21 +34,20 @@ PyCharm → File → Open → C:\Users\acer-pc\WorkBuddy\2026-10-20-08-44-29\pyt
 
 右上角运行下拉框里，应该有这三项（我已经帮你配好了 `.run/` 目录）：
 
-- `FastAPI: uvicorn (debug)`
-- `pytest: current file`
-- `pytest: whole suite`
-
+- [ ] `FastAPI: uvicorn (debug)`
+- [ ] `pytest: current file`
+- [ ] `pytest: whole suite`
 - [ ] 下拉框里能看到这三项
 
 **如果看不到**：重启 PyCharm（它会加载 `.run/` 目录）。还是没有的话，手动建一个：`Run → Edit Configurations → + → Python`，参数照下面填：
 
-| 字段 | 值 |
-|---|---|
-| Module name | `uvicorn`（**选 module 单选按钮**，不是 Script path） |
-| Parameters | `kb_service.main:app --reload --port 8000` |
-| Working directory | `...\python-backend-roadmap\kb-service` |
-| Interpreters | 项目 venv |
-| EnvFile | `...\python-backend-roadmap\kb-service\.env`（PyCharm 2023+ 支持，底部有 EnvFile 标签） |
+| 字段                | 值                                                                             |
+| ----------------- | ----------------------------------------------------------------------------- |
+| Module name       | `uvicorn`（**选 module 单选按钮**，不是 Script path）                                   |
+| Parameters        | `kb_service.main:app --reload --port 8000`                                    |
+| Working directory | `...\python-backend-roadmap\kb-service`                                       |
+| Interpreters      | 项目 venv                                                                       |
+| EnvFile           | `...\python-backend-roadmap\kb-service\.env`（PyCharm 2023+ 支持，底部有 EnvFile 标签） |
 
 ### 0.4 验证测试能跑
 
@@ -80,16 +79,17 @@ INFO:     Uvicorn running on http://127.0.0.1:8000
 
 调试暂停时，**Debug 窗口左上角**有一排按钮（也可以记快捷键）：
 
-| 按钮 | 快捷键 | 作用 |
-|---|---|---|
-| ▶️ Resume Program | `F9` | 继续跑到下一个断点 |
-| ⤵️ Step Over | `F8` | **执行当前行**，不进入函数 |
-| ⬇️ Step Into | `F7` | **进入函数内部** |
+| 按钮                 | 快捷键        | 作用                                |
+| ------------------ | ---------- | --------------------------------- |
+| ▶️ Resume Program  | `F9`       | 继续跑到下一个断点                         |
+| ⤵️ Step Over       | `F8`       | **执行当前行**，不进入函数                   |
+| ⬇️ Step Into       | `F7`       | **进入函数内部**                        |
 | 🎯 Smart Step Into | `Shift+F7` | **一行里有多个调用时，让你选进哪一个** ⭐PyCharm 独有 |
-| ⬆️ Step Out | `Shift+F8` | 执行完当前函数，回到调用处 |
-| ⏹ Stop | `Ctrl+F2` | 停止 |
+| ⬆️ Step Out        | `Shift+F8` | 执行完当前函数，回到调用处                     |
+| ⏹ Stop             | `Ctrl+F2`  | 停止                                |
 
 **一句话记住**：
+
 > **F8 = 跳过，F7 = 钻进去，Shift+F8 = 钻出来，F9 = 跑到下一个断点。**
 
 ⚠️ **和 VS Code 最大的不同**：F5 在 PyCharm 里是**重新启动调试**，不是继续！按错会导致反复重启，这是最常见的困惑。
@@ -102,17 +102,17 @@ INFO:     Uvicorn running on http://127.0.0.1:8000
 
 切到 **Debugger** 标签，左侧是三个窗口：
 
-| 面板 | 作用 | 为什么重要 |
-|---|---|---|
-| **Frames**（调用栈） | 谁调用了当前函数 | **排查最有力的工具** |
-| **Variables**（变量） | 当前作用域所有变量 | 看值、改值、看嵌套对象 |
-| **Watches**（监视） | 手动输入表达式盯着 | 比如盯 `len(rows)` |
+| 面板                | 作用        | 为什么重要           |
+| ----------------- | --------- | --------------- |
+| **Frames**（调用栈）   | 谁调用了当前函数  | **排查最有力的工具**    |
+| **Variables**（变量） | 当前作用域所有变量 | 看值、改值、看嵌套对象     |
+| **Watches**（监视）   | 手动输入表达式盯着 | 比如盯 `len(rows)` |
 
 **PyCharm 独有的杀手功能**：
-- **Inline Values**：代码行右边**直接显示变量的值**（不用展开面板看）
-- **行内求值**：选中一个表达式，右键 → `Evaluate Expression`（`Alt+F8`），可以在暂停时**执行任意代码**，比如 `len(store.kbs)`
-- **Set Value**（`F2`）：**临时改变量的值**，不用改代码就能测试边界情况
 
+- [ ] **Inline Values**：代码行右边**直接显示变量的值**（不用展开面板看）
+- [ ] **行内求值**：选中一个表达式，右键 → `Evaluate Expression`（`Alt+F8`），可以在暂停时**执行任意代码**，比如 `len(store.kbs)`
+- [ ] **Set Value**（`F2`）：**临时改变量的值**，不用改代码就能测试边界情况
 - [ ] 我找到了 Frames / Variables / Watches 三个面板
 - [ ] 我试过 `Alt+F8` 求值
 
@@ -135,7 +135,7 @@ INFO:     Uvicorn running on http://127.0.0.1:8000
 
 ### 2.2 触发断点
 
-**用浏览器打开 http://127.0.0.1:8000/api/v1/health**
+**用浏览器打开 <http://127.0.0.1:8000/api/v1/health>**
 
 - [ ] 页面转圈（程序停在断点了）
 - [ ] PyCharm 自动跳到 `health.py`，当前行**高亮成蓝色**
@@ -169,13 +169,14 @@ INFO:     Uvicorn running on http://127.0.0.1:8000
 4. 回车
 
 **两种触发方式**：
+
 - 直接在代码里右键红点填条件（快）
 - 或 `Ctrl+Shift+F8` 打开 **Breakpoints 总览**（能看到所有断点，也能加条件）
 
 **验证**：去 `/docs` 调两次 `GET /api/v1/kbs/{kb_id}`：
-- 传 `11111111-1111-4111-8111-111111111111` → **不停**
-- 传 `ffffffff-ffff-4fff-8fff-ffffffffffff` → **停住**
 
+- [ ] 传 `11111111-1111-4111-8111-111111111111` → **不停**
+- [ ] 传 `ffffffff-ffff-4fff-8fff-ffffffffffff` → **停住**
 - [ ] 两次行为不同，我亲眼看到条件生效
 - [ ] 我能说出：红点带对勾说明是条件断点
 
@@ -254,11 +255,11 @@ if overlap > chunk_size:
 
 **提示**：这次的坑是 `step = chunk_size - overlap` 算出 **0**，`range(0, len(text), 0)` 立刻抛 `ValueError: range() arg 3 must not be zero`。用**异常断点**抓它，比读代码快得多。
 
-| 项 | 你的答案 |
-|---|---|
-| 现象 | ？ |
-| 定位过程（用了哪个手段） | ？ |
-| 根因 | ？ |
+| 项            | 你的答案 |
+| ------------ | ---- |
+| 现象           | ？    |
+| 定位过程（用了哪个手段） | ？    |
+| 根因           | ？    |
 
 - [ ] 我定位到了，并且能解释"为什么 overlap == chunk_size 会导致 step=0"
 
@@ -273,7 +274,7 @@ if overlap > chunk_size:
 
 **关键问题**：这个错误是在服务启动时抛的，还是处理请求时抛的？为什么这样设计？
 
-答：__________
+答：\__________
 
 改回来。（建议先备份：`Copy-Item .env .env.bak`）
 
@@ -319,13 +320,13 @@ settings.model_dump()             # 整个配置长什么样
 
 右键断点能看到这些选项：
 
-| 选项 | 用途 |
-|---|---|
-| **Condition** | 条件表达式 |
-| **Log message to console** | **只打印不暂停**（日志断点，生产环境常用思路） |
-| **Evaluate and log** | 打印任意表达式的值 |
-| **Remove once hit** | 只停一次就自动删除 |
-| **Disable until breakpoint X is hit** | 断点 A 命中后才启用 B（跨函数追踪神器） |
+| 选项                                    | 用途                        |
+| ------------------------------------- | ------------------------- |
+| **Condition**                         | 条件表达式                     |
+| **Log message to console**            | **只打印不暂停**（日志断点，生产环境常用思路） |
+| **Evaluate and log**                  | 打印任意表达式的值                 |
+| **Remove once hit**                   | 只停一次就自动删除                 |
+| **Disable until breakpoint X is hit** | 断点 A 命中后才启用 B（跨函数追踪神器）    |
 
 - [ ] 我看过这个菜单
 
