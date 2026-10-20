@@ -251,9 +251,27 @@ if overlap >= chunk_size:
 if overlap > chunk_size:
 ```
 
-然后上传一个文档（`/docs` 里 `POST /api/v1/kbs/{kb_id}/documents`），观察会发生什么。
+然后测试一次切分，观察会发生什么。
 
-**提示**：这次的坑是 `step = chunk_size - overlap` 算出 **0**，`range(0, len(text), 0)` 立刻抛 `ValueError: range() arg 3 must not be zero`。用**异常断点**抓它，比读代码快得多。
+> ⚠️ **2026-10-20 修正**：原文档写的是"上传一个文档"——**那样触发不到**。因为 `_parse_sync` 里参数写死了 `chunk_size=400, overlap=50`（`doc_service.py:62`），HTTP 接口永远不会传 `overlap == chunk_size`。必须从函数入口直接调。
+
+**正确做法**：在 `kb-service/tests/` 新建 `test_bug1.py`：
+
+```python
+from __future__ import annotations
+
+from kb_service.services.doc_service import split_text
+
+
+def test_overlap_equal_chunk_size() -> None:
+    split_text("x" * 1000, chunk_size=400, overlap=400)
+```
+
+然后在 `doc_service.py:77`（`step = chunk_size - overlap`）打断点，**Debug 这个测试函数**。
+
+**提示**：这次的坑是 `step = chunk_size - overlap` 算出 **0**，`range(0, len(text), 0)` 立刻抛 `ValueError: range() arg 3 must not be zero`（位置在 **79 行**，不是 76 行的校验处——说明校验漏了，程序一路跑到 `range()` 才炸）。用**异常断点**抓它，比读代码快得多。
+
+**观察点**：停在 77 行时用 `Alt+F8` 求值 `chunk_size - overlap` → `0`；按 `F8` 执行完 77 行，Variables 里 `step` 就是 `0`。
 
 | 项            | 你的答案 |
 | ------------ | ---- |
@@ -262,8 +280,9 @@ if overlap > chunk_size:
 | 根因           | ？    |
 
 - [ ] 我定位到了，并且能解释"为什么 overlap == chunk_size 会导致 step=0"
+- [ ] 我理解了：**接口测不出这个 bug，是因为调用方参数写死了** —— 边界 bug 必须靠单测函数本身
 
-还原：`git checkout kb-service/src/kb_service/services/doc_service.py`
+还原：`git checkout kb-service/src/kb_service/services/doc_service.py`，删掉 `test_bug1.py`
 
 ### Bug #2 · 删掉 SECRET_KEY
 
@@ -282,9 +301,23 @@ if overlap > chunk_size:
 
 在 `kb-service/src/kb_service/api/v1/documents.py` 里，把 `create_doc` 的 `kb_id: UUID,` 这行注释掉。
 
-- [ ] 我看到了 422
-- [ ] 我能在 `/docs` 里看到 `detail` 的结构
-- [ ] 我能说出：这个 422 是 **FastAPI 框架层**拦下的，业务代码根本没执行
+> ⚠️ **2026-10-20 修正**：原文档说"会看到 422"——**实测是 500 + `NameError`**。这是一个很好的教学反转，两个都做一遍。
+
+**实验 3-A（删参数 → 500）**
+
+- [ ] 应用**能正常启动**（说明 Python 定义时不检查函数体里的名字）
+- [ ] 请求接口返回 **500**，日志里是 `NameError: name 'kb_id' is not defined`
+- [ ] 我能说出：这个错**已经进了函数体**，是业务代码炸的，属于服务端错误（5xx）
+
+**实验 3-B（真 422，保留声明但传非法值）**
+
+先还原代码，然后去 `/docs` 调 `POST /api/v1/kbs/not-a-uuid/documents`（路径里故意不写 UUID）——或者在浏览器直接访问一个带非法 UUID 的 GET 接口。
+
+- [ ] 我看到了 **422**，`detail` 是一个**数组**
+- [ ] 我能说出 `detail[0]` 里的 `loc` / `type` / `msg` / `input` 分别是什么
+- [ ] 我能说出：422 是 **FastAPI 框架层**在进入函数体**之前**拦下的，业务代码根本没执行
+
+**一句话区别**：422 = 门口拦下（客户端错，4xx）；500 = 进屋后炸了（服务端错，5xx）。
 
 还原：`git checkout kb-service/src/kb_service/api/v1/documents.py`
 
@@ -371,15 +404,46 @@ git push
 
 ## 今日验收清单（9 条）
 
-- [ ] PyCharm 打开的是仓库根目录，解释器是 `.venv` 的 Python 3.11
-- [ ] 能用 🐞 启动调试，服务正常运行
-- [ ] 能在 `health.py:12` 打普通断点，浏览器请求能打中
-- [ ] 能用**条件断点**（红点带对勾）让程序只在特定请求上停
-- [ ] 能开启**异常断点**（Any Exception），让程序停在 `raise` 那一行
-- [ ] **成功 Step Into 到第三方库源码**（python-jose）
-- [ ] 能用 Frames 面板看出异常的抛出层级
-- [ ] 3 个 bug 全部定位并写进调试记录
-- [ ] 试过 `Alt+F8` Evaluate Expression
+> 状态（2026-10-20 16:35）：✅ 已完成
+> - PyCharm 打开的是仓库根目录，解释器是 `.venv` 的 Python 3.11
+> - 能用 🐞 启动调试，服务正常运行
+> - 能在 `health.py:12` 打普通断点，浏览器请求能打中
+> - 能用**条件断点**（红点带对勾）让程序只在特定请求上停
+> - 能开启**异常断点**（Any Exception），让程序停在异常构造处（注意：不是 `raise` 那一行，见下方"踩坑记录"）
+> - **成功 Step Into 到第三方库源码**（python-jose 的 `jws.py`）
+> - 能用 Frames 面板看出异常的抛出层级
+> - 3 个 bug 全部定位并写进调试记录（其中 Bug#1 路径已修正、Bug#3 预期已纠正）
+> - 试过 `Alt+F8` Evaluate Expression
+
+---
+
+## 踩坑记录（PyCharm 实操，别人容易重复踩）
+
+| # | 现象 | 根因 | 对策 |
+|---|------|------|------|
+| 1 | 按 `Shift+F7` 在光标处打出 `&` | 中文输入法拦截了 `Shift+数字` | 切英文输入法；或用菜单 `Run → Debugging Actions → Smart Step Into` |
+| 2 | 断点打在 39 行，按 `F7` 却"直接跳过" | 执行指针**已经在 40 行**（`jwt.decode` 多行调用已执行完返回） | **认蓝色高亮行**——那才是"即将执行"的行；或直接在第三方库文件里打断点 |
+| 3 | 异常断点停在 `exceptions.py:19 __init__`，不是 `raise` 那一行 | `Any Exception` 捕获的是异常**实例化瞬间**，`raise UnauthorizedError(...)` 里先 `__init__` 再抛 | 正常现象；要看抛出位置就继续 `F8` 到 `raise`，或者用 Frames 看调用者 |
+| 4 | `Alt+F8` 求值 `store.kbs` 报 `NameError` | Evaluate Expression 的作用域 = **当前栈帧的名字空间**，不是全局控制台 | 用完整导入路径，或在 Frames 里切到 `base.py` 的帧 |
+| 5 | 求值 `self.repo.kbs` 报 `AttributeError` | `KBRepository` **无状态**，数据在模块级单例 `store` 里，不在实例上 | 这是"模块级单例"坏味道，W7 换 SQLAlchemy 时一并修掉 |
+
+---
+
+## 今天的两处文档纠错（重要）
+
+> 这两条说明：**照抄教程不如自己验证**。文档写错是常态，能发现错误的前提是你真动手了。
+
+**纠错 1 · Bug #1 原步骤无效**
+原文说"上传一个文档观察会发生什么"——**触发不到**。因为 `_parse_sync` 里参数写死 `chunk_size=400, overlap=50`（`doc_service.py:62`），HTTP 接口永远传不出 `overlap == chunk_size`。
+→ 改为**单测直接调函数入口**。
+**教训**：边界 bug 常藏在"当前调用方不会传的参数"里。测接口测不出，必须单测函数本身。
+
+**纠错 2 · Bug #3 预期错误（422 → 实际 500）**
+原文说"注释掉 `kb_id` 会看到 422"。实测：
+- 应用**正常启动**（Python 定义时不检查函数体内的名字）
+- 请求返回 **500**，日志 `NameError: name 'kb_id' is not defined`（`documents.py:21`）
+→ 拆成两个实验：3-A 看 500（已进函数体），3-B 看 422（框架门口拦）。
+**教训**：**4xx 是客户端错，5xx 是服务端错**。把本该 4xx 的情况写成 5xx，客户端会盲目重试，是 API 设计事故。
 
 ---
 
@@ -387,4 +451,4 @@ git push
 
 学会了这些，面试时你可以说：
 
-> "我习惯用调试器而不是 print 排查问题。条件断点抓偶现问题，异常断点定位第一个抛出点，Frames 还原调用链，Evaluate Expression 不改代码就能验证猜想。我读过 FastAPI 的 Depends 实现，它在路由执行前按签名递归解析依赖树，同请求内缓存结果。"
+> "我习惯用调试器而不是 print 排查问题。条件断点抓偶现问题，异常断点定位第一个抛出点，Frames 还原调用链，Evaluate Expression 不改代码就能验证猜想。我读过 FastAPI 的 Depends 实现，它在路由执行前按签名递归解析依赖树，同请求内缓存结果。我也分得清 422 和 500 的界线：422 是框架在进函数体之前拦下的参数校验错误，500 是业务代码已经执行后炸的——把前者写成后者是 API 设计事故。"
