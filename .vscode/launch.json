@@ -7,8 +7,8 @@
       "request": "launch",
       "module": "uvicorn",
       "args": ["kb_service.main:app", "--reload", "--port", "8000"],
-      "cwd": "${workspaceFolder}",
-      "envFile": "${workspaceFolder}/.env",
+      "cwd": "${workspaceFolder}/kb-service",
+      "envFile": "${workspaceFolder}/kb-service/.env",
       "justMyCode": false,
       "console": "integratedTerminal"
     },
@@ -18,7 +18,7 @@
       "request": "launch",
       "module": "pytest",
       "args": ["${file}", "-q", "-p", "no:cacheprovider"],
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/kb-service",
       "justMyCode": false,
       "console": "integratedTerminal"
     },
@@ -28,7 +28,7 @@
       "request": "launch",
       "module": "pytest",
       "args": ["-q", "-p", "no:cacheprovider"],
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/kb-service",
       "justMyCode": true,
       "console": "integratedTerminal"
     }

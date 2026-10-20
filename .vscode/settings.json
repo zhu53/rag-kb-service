@@ -1,10 +1,11 @@
 {
-  // 保存即自动修复 + 格式化；组织 import。Day1 装好 Ruff 扩展后生效。
   "python.languageServer": "Pylance",
   "python.analysis.typeCheckingMode": "standard",
   "python.testing.pytestEnabled": true,
   "python.testing.unittestEnabled": false,
-  "python.testing.pytestArgs": ["tests"],
+  "python.testing.pytestArgs": [
+    "**/kb-service/tests"
+  ],
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
     "source.fixAll.ruff": "explicit",
@@ -18,5 +19,9 @@
     "**/.mypy_cache": true,
     "**/.ruff_cache": true,
     "**/.pytest_cache": true
-  }
+  },
+  "python.defaultInterpreterPath": "${workspaceFolder}/kb-service/.venv/Scripts/python.exe",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/kb-service/src"
+  ]
 }
