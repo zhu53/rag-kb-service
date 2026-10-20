@@ -50,3 +50,6 @@ async def update_kb(
 @router.delete("/{kb_id}", status_code=status.HTTP_204_NO_CONTENT, summary="删除知识库")
 async def delete_kb(kb_id: UUID, user_id: UUID = Depends(get_current_user_id)) -> None:
     KBService().delete(kb_id, user_id)
+
+
+# TODO: 统计接口后续支持按时间范围过滤（wb）/后续支持按时间范围过滤
