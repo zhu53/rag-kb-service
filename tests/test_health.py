@@ -7,6 +7,7 @@ def test_health(client: TestClient) -> None:
     r = client.get("/api/v1/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
+    # assert r.json() == {"status": "healthy"}
     assert "X-Trace-Id" in r.headers
 
 
