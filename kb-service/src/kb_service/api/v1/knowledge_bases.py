@@ -28,6 +28,11 @@ async def list_kbs(
     return KBService().list(user_id, page, size)
 
 
+@router.get("/stats/count", summary="我的知识库总数")
+async def count_kbs(user_id: UUID = Depends(get_current_user_id)) -> dict[str, int]:
+    return {"count": KBService().count_owned(user_id)}
+
+
 @router.get("/{kb_id}", summary="查询知识库详情")
 async def get_kb(kb_id: UUID, user_id: UUID = Depends(get_current_user_id)) -> KBOut:
     return KBOut.model_validate(KBService().get_or_403(kb_id, user_id))

@@ -86,3 +86,27 @@ def test_chat_stream_sse(client: TestClient) -> None:
         body = "".join(resp.iter_text())
     assert "data: " in body
     assert "[DONE]" in body
+
+
+def test_count_kbs(client: TestClient) -> None:
+    """统计接口应返回当前用户的知识库数量。"""
+    for i in range(3):
+        client.post("/api/v1/kbs", json={"name": f"kb-{i}"})
+
+    resp = client.get("/api/v1/kbs/stats/count")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"count": 3}
+
+
+def test_count_kbs_excludes_other_users(client: TestClient) -> None:
+    """别人的知识库不该被计入。"""
+    from uuid import UUID
+
+    from kb_service.core.security import create_access_token
+
+    client.post("/api/v1/kbs", json={"name": "mine"})
+    other = {"Authorization": f"Bearer {create_access_token(str(UUID(int=99)))}"}
+
+    assert client.get("/api/v1/kbs/stats/count").json() == {"count": 1}
+    assert client.get("/api/v1/kbs/stats/count", headers=other).json() == {"count": 0}

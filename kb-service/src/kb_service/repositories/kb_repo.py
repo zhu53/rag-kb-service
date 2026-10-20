@@ -38,6 +38,10 @@ class KBRepository:
         rows.sort(key=lambda r: r["created_at"], reverse=True)
         return rows[offset : offset + limit], len(rows)
 
+    def count_by_owner(self, owner_id: UUID) -> int:
+        """统计该主人名下知识库数量。W7改成 SELECT COUNT(*)."""
+        return sum(1 for r in store.kbs.values() if r["owner_id"] == owner_id)
+
     def update(self, kb_id: UUID, data: KBUpdate) -> dict[str, Any] | None:
         row = store.kbs.get(kb_id)
         if row is None:
