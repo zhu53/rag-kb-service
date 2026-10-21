@@ -15,14 +15,17 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
+import re
 import time
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
+from itertools import chain, zip_longest
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Protocol
-
 
 # ---------------------------------------------------------------- Day4
 
@@ -32,8 +35,11 @@ def ex01_list_py_files(root: Path) -> list[tuple[str, int]]:
 
     练习点：pathlib.Path.rglob / stat().st_size / sorted(key=)
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex01")
+    result: list[tuple[str, int]] = []
+    for p in root.rglob("*.py"):
+        if p.is_file():
+            result.append((str(p), p.stat().st_size))
+    return sorted(result, key=lambda x: x[1], reverse=True)
 
 
 def ex02_make_json_safe(obj: object) -> str:
@@ -41,8 +47,13 @@ def ex02_make_json_safe(obj: object) -> str:
 
     练习点：json.dumps(default=...)
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex02")
+
+    def default(o: object) -> str:
+        if isinstance(o, datetime):
+            return o.isoformat()
+        raise TypeError(f"不可序列化的类型：{type(o).__name__}")
+
+    return json.dumps(obj, default=default)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +64,8 @@ class DbConfig:
 
     def __post_init__(self) -> None:
         """构造时校验：port 必须在 1-65535 之间，否则 raise ValueError。"""
-        # TODO: 你的实现
+        if not 1 <= self.port <= 65535:
+            raise ValueError(f"port 必须在 1-65535 之间，当前值 {self.port}")
 
 
 def ex03_top_words(text: str, n: int = 10) -> list[tuple[str, int]]:
@@ -61,8 +73,13 @@ def ex03_top_words(text: str, n: int = 10) -> list[tuple[str, int]]:
 
     练习点：re.findall / Counter.most_common
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex03")
+    if not text:
+        return []
+    words = re.findall(r"[a-z']+", text.lower())
+    return Counter(words).most_common(n)
+
+
+_MISSING = object()
 
 
 def ex04_merge_alternating(a: list[str], b: list[str]) -> list[str]:
@@ -70,8 +87,8 @@ def ex04_merge_alternating(a: list[str], b: list[str]) -> list[str]:
 
     练习点：itertools.zip_longest / chain
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex04")
+    pairs = zip_longest(a, b, fillvalue=_MISSING)
+    return [v for v in chain.from_iterable(pairs) if v is not _MISSING]
 
 
 def ex05_rotating_logger(log_dir: Path) -> object:
@@ -79,8 +96,18 @@ def ex05_rotating_logger(log_dir: Path) -> object:
 
     练习点：logging.getLogger / RotatingFileHandler / Formatter
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex05")
+    logger = logging.getLogger("stdlib_practice")
+    handler = RotatingFileHandler(
+        log_dir / "app.log",
+        maxBytes=1 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    return logger
 
 
 def ex06_sliding_max(values: list[int], k: int) -> list[int]:
@@ -89,8 +116,17 @@ def ex06_sliding_max(values: list[int], k: int) -> list[int]:
     练习点：collections.deque（单调队列，O(n)）
     例：[1,3,-1,-3,5,3,6,7], k=3 -> [3,3,5,5,6,7]
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex06")
+    dq: deque[int] = deque()  # 存下标，对应值从队头到队尾递减
+    result: list[int] = []
+    for i, v in enumerate(values):
+        while dq and values[dq[-1]] <= v:
+            dq.pop()
+        dq.append(i)
+        if dq[0] <= i - k:
+            dq.popleft()
+        if i >= k - 1:
+            result.append(values[dq[0]])
+    return result
 
 
 # ---------------------------------------------------------------- Day5
@@ -191,7 +227,7 @@ def _check_no(name: str, fn, expectation) -> None:  # type: ignore[no-untyped-de
     except NotImplementedError:
         print(f"[TODO] {name} 还没实现")
         return
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[FAIL] {name} 抛出异常：{type(exc).__name__}: {exc}")
         return
     if expectation(got):
