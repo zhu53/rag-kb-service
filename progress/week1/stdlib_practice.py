@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import contextlib
 import json
@@ -19,9 +20,10 @@ import logging
 import re
 import time
 from collections import Counter, defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from functools import lru_cache
 from itertools import chain, zip_longest
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -159,8 +161,8 @@ def ex07_flush_all(docs: list[Storable]) -> None:
 
     练习点：Protocol 让两个毫无继承关系的类都能传进来，且 mypy 认账。
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex07")
+    for d in docs:
+        print(d.to_dict())
 
 
 async def ex08_fetch_all(urls: list[str], concurrency: int = 3) -> list[str]:
@@ -169,8 +171,15 @@ async def ex08_fetch_all(urls: list[str], concurrency: int = 3) -> list[str]:
     这里用 asyncio.sleep 模拟 IO。要求：返回顺序与输入一致。
     练习点：asyncio.Semaphore / TaskGroup / 收集结果顺序
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex08")
+    sem = asyncio.Semaphore(concurrency)
+
+    async def fetch_one(url: str) -> str:
+        async with sem:                # 限流：计数器归零时后续协程在此挂起
+            await asyncio.sleep(0.1)   # 模拟 IO
+            return url
+
+    # gather 保证结果顺序 = 传入顺序，与完成时间无关
+    return await asyncio.gather(*(fetch_one(url) for url in urls))
 
 
 def ex09_cli_parser() -> object:
@@ -178,8 +187,11 @@ def ex09_cli_parser() -> object:
 
     练习点：argparse.ArgumentParser.add_argument 的 action/type/choices
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex09")
+    parser = argparse.ArgumentParser(description="练习 argparse 基础参数")
+    parser.add_argument("--verbose", action="store_true", help="打印详细日志")
+    parser.add_argument("--count", type=int, default=1, help="重复次数")
+    parser.add_argument("--mode", choices=["fast", "slow"], default="fast", help="运行模式")
+    return parser
 
 
 @contextlib.contextmanager
@@ -188,8 +200,20 @@ def ex10_timer(label: str = "elapsed"):
 
     练习点：contextlib.contextmanager / try-finally
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex10")
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        cost_ms = (time.perf_counter() - start) * 1000
+        print(f"{label}: {cost_ms:.2f} ms")
+
+
+@lru_cache(maxsize=None)  # noqa: UP033 —— 本题练习点就是 lru_cache；生产代码里等价写法是 @functools.cache
+def _fib(n: int) -> int:
+    """递归斐波那契。必须放在模块级：定义在函数内会导致每次调用重建缓存。"""
+    if n < 2:
+        return n
+    return _fib(n - 1) + _fib(n - 2)
 
 
 def ex11_fib_cached(n: int) -> int:
@@ -197,8 +221,14 @@ def ex11_fib_cached(n: int) -> int:
 
     练习点：functools.lru_cache / cache_info()
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex11")
+    before = _fib.cache_info()
+    result = _fib(n)
+    after = _fib.cache_info()
+    if after.hits > before.hits:
+        print(f"fib({n}) 命中缓存，累计 hits={after.hits}, misses={after.misses}")
+    else:
+        print(f"fib({n}) 未命中缓存，累计 hits={after.hits}, misses={after.misses}")
+    return result
 
 
 class DocStatus(StrEnum):
@@ -214,8 +244,11 @@ def ex12_group_by_status(rows: list[dict[str, str]]) -> dict[DocStatus, list[str
 
     练习点：defaultdict + StrEnum 的成员查找
     """
-    # TODO: 你的实现
-    raise NotImplementedError("ex12")
+    grouped: dict[DocStatus, list[str]] = defaultdict(list)
+    for row in rows:
+        status = DocStatus(row["status"])
+        grouped[status].append(row["id"])
+    return grouped
 
 
 # ---------------------------------------------------------------- 自检器
