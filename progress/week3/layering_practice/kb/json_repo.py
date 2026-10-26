@@ -1,10 +1,13 @@
 import json
+import logging
 import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 from retry import retry
+
+logger = logging.getLogger(__name__)
 
 
 class JSONFileKBRepository:
@@ -28,6 +31,7 @@ class JSONFileKBRepository:
 
     @retry(times=3)
     def _save(self, data: dict[str, Any]) -> None:
+        logger.info("写盘 kbs=%d", len(data["kbs"]))
         self._path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -51,9 +55,7 @@ class JSONFileKBRepository:
 
     def list_by_owner(self, owner_id: str) -> list[dict[str, Any]]:
         data = self._load()
-        return [
-            kb for kb in data["kbs"].values() if kb["owner_id"] == owner_id
-        ]
+        return [kb for kb in data["kbs"].values() if kb["owner_id"] == owner_id]
 
     def delete(self, kb_id: str) -> bool:
         data = self._load()

@@ -1,4 +1,5 @@
 """repo 层契约：只定义'能做什么'，不定义'怎么存'。"""
+
 from typing import Any, Protocol
 
 

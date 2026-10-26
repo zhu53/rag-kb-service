@@ -1,12 +1,15 @@
-from typing import Any
 import time
 import uuid
+from typing import Any
+
 
 class InMemoryKBRepository:
     """dict 存内存，进程死了数据就没了——最诚实的实现。"""
 
     def __init__(self) -> None:
-        self._data: dict[str, dict[str, Any]] = {}          # 存什么结构？提示：kb_id -> 记录dict
+        self._data: dict[
+            str, dict[str, Any]
+        ] = {}  # 存什么结构？提示：kb_id -> 记录dict
 
     def create(self, owner_id: str, name: str) -> dict[str, Any]:
         kb_id = uuid.uuid4().hex[:8]
@@ -20,7 +23,7 @@ class InMemoryKBRepository:
         return record
 
     def get(self, kb_id: str):
-        return self._data.get(kb_id)     # 注意：get 找不到就返回 None，不抛异常
+        return self._data.get(kb_id)  # 注意：get 找不到就返回 None，不抛异常
 
     def list_by_owner(self, owner_id: str):
         # 遍历 self._data.values()，筛 owner_id 匹配的，凑成 list 返回
