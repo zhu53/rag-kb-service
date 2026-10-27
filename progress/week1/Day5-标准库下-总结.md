@@ -1,31 +1,11 @@
-# Day5 · 标准库速通（下）总结
+# Day5 · 标准库速通（下）【面试参考版】
 
-> **日期**：2026-10-21
-> **投入**：约 3h（含卡壳排查）
-> **结果**：**ex01–ex12 共 12 道全部 `[PASS]`**，`ruff check` All checks passed
-> **提交**：由用户手动推送（新约定：推送三连自己练）
-> **文件**：`progress/week1/stdlib_practice.py`（W1 代码任务至此全部完成）
+> 日期：2026-10-21 ｜ **ex01–ex12 共 12 道全部 PASS**，ruff All checks passed ｜ 文件：`progress/week1/stdlib_practice.py`
+> 用法：§2 的 gather vs TaskGroup、§5 的 lru_cache 作用域是高频题；§8 追问链覆盖并发与缓存。
 
 ---
 
-## 一、完成情况
-
-| 练习 | 模块 | 核心 API | 状态 |
-|---|---|---|---|
-| ex07 | `typing.Protocol` | 结构化子类型 | ✅ PASS |
-| ex08 | `asyncio` | `Semaphore` / `gather` | ✅ PASS |
-| ex09 | `argparse` | `store_true` / `type=` / `choices=` | ✅ PASS |
-| ex10 | `contextlib` | `@contextmanager` / `try-finally` | ✅ PASS（实测 10.26 ms） |
-| ex11 | `functools` | `lru_cache` / `cache_info()` | ✅ PASS（hits 8→9 实证） |
-| ex12 | `enum` + `collections` | `StrEnum` / `defaultdict(list)` | ✅ PASS |
-
-**过程记录**：ex08、ex11 其实一次写对了，卡住的原因是**忘了导入 `functools`，脚本在模块加载时 `NameError`**。教训见"三、坑"。
-
----
-
-## 二、六个知识点（面试可直接说）
-
-### 1. `Protocol` —— 看形状，不看血统
+## 1. `Protocol` —— 看形状，不看血统
 
 ```python
 class Storable(Protocol):
@@ -38,24 +18,26 @@ def ex07_flush_all(docs: list[Storable]) -> None:
 
 `UserDoc` 和 `NoteDoc` **没有任何继承关系**，却都能传进 `list[Storable]`——因为 Protocol 只检查"有没有 `to_dict()`、签名对不对"，这叫**结构化子类型**。
 
-三个关键认知：
-
 | 问题 | 答案 |
 |---|---|
-| 运行时会检查吗？ | **不会**。纯鸭子类型，缺方法照样到调用时才炸 |
-| 那 Protocol 有什么用？ | **给 mypy / IDE 看的**。传错类型编辑器直接红线，不用等运行时 |
-| 第三方类没继承我的接口能用吗？ | **能，零侵入**。这正是它比 ABC 强的地方 |
+| 运行时会检查吗？ | **不会**。纯鸭子类型，缺方法到调用时才炸 |
+| 那它有什么用？ | **给 mypy / IDE 看**：传错类型编辑器直接红线，不用等运行时 |
+| 第三方类没继承能用吗？ | **能，零侵入**（这正是它比 ABC 强的地方） |
 
-**Protocol vs ABC（高频面试题）**：
+### Protocol vs ABC（高频面试题，D4 会再展开）
 
 | | `Protocol` | `ABC` |
 |---|---|---|
-| 建立关系的方式 | 隐式（形状匹配） | 显式（必须继承） |
-| 能约束第三方类吗 | 能 | 不能（人家不继承你） |
-| 运行时强制 | 无 | 可用 `@abstractmethod` 强制子类实现 |
-| 适用 | "只要能 do X 就行" | "必须是我家族的一员" |
+| 建立关系 | 隐式（形状匹配） | 显式（必须继承） |
+| 约束第三方类 | 能 | 不能（人家不继承你） |
+| 运行时强制 | 无 | `@abstractmethod` 可在实例化时报错 |
+| 适用 | "只要能 do X 就行" | "必须是我家族一员"、"需要共享实现" |
 
-### 2. `asyncio.Semaphore` + `gather` —— 限流与保序
+**什么时候必须用 ABC**：需要**运行时强制**（漏实现就炸）、需要基类提供共享实现/模板方法、需要 `isinstance` 判断血统。
+
+---
+
+## 2. `asyncio.Semaphore` + `gather` —— 限流与保序
 
 ```python
 sem = asyncio.Semaphore(concurrency)
@@ -70,20 +52,34 @@ return await asyncio.gather(*(fetch_one(url) for url in urls))
 
 两个机制分开记：
 
-- **限流**：`Semaphore(2)` 是计数器。`async with` 进入时 -1，**减到 0 后再进就挂起**；退出时 +1，唤醒一个排队者。所以 N 个任务同时最多 2 个在跑
-- **保序**：**gather 返回列表的第 i 个 = 第 i 个传入协程的返回值**，与完成时间无关。u4 先完成也不影响 `[u0, u1, ...]` 的顺序
+- **限流**：`Semaphore(2)` 是计数器。`async with` 进入 -1，**减到 0 后再进就挂起**；退出 +1 唤醒一个排队者。N 个任务同时最多 2 个在跑。
+- **保序**：**gather 返回列表第 i 个 = 第 i 个传入协程的返回值**，与完成时间无关。
 
-**`*` 解包的细节**：`gather(*(gen))` 把生成器展开成 5 个独立协程参数。如果写成 `gather(gen)`，gather 会把整个生成器当成**一个**任务。
+**`*` 解包细节**：`gather(*(gen))` 把生成器展开成 N 个独立协程参数；写成 `gather(gen)` 会把整个生成器当成**一个**任务。
 
-**gather vs TaskGroup（必背）**：
+### gather vs TaskGroup（必背）
 
 | | `gather` | `TaskGroup`（3.11+） |
 |---|---|---|
-| 一个任务失败 | 默认立刻抛异常，**其余任务继续跑**（变孤儿） | **自动取消其余全部**，聚合异常一起抛 |
+| 一个任务失败 | 默认立刻抛异常，**其余任务继续跑**（变孤儿） | **自动取消其余全部**，聚合为 ExceptionGroup |
 | 语义 | "把结果收集齐" | **结构化并发**：块结束 = 所有任务都结束 |
-| 生产推荐 | 收集结果且想容忍失败（配 `return_exceptions=True`） | 默认首选 |
+| 生产推荐 | 想容忍失败时配 `return_exceptions=True` | 默认首选 |
 
-### 3. `argparse` —— CLI 三件套
+**孤儿为什么危险**：请求已经 500 返回给用户了，后台"写数据库/调第三方"的协程还在跑——浪费资源 + 可能写脏数据。
+
+### 面试问法："并发请求下游，怎么控制并发数并保证结果顺序？"
+
+**30 秒答案**："用 Semaphore 控制并发、gather 保证顺序。Semaphore 是计数器，进 async with 时减一，减到零后续协程就在原地挂起，退出时加一并唤醒一个等待者，这样同时最多 N 个在跑。gather 返回的列表按传入顺序排，跟谁先完成无关，所以天然保序。要注意两点：一是任务生成要用 `*` 解包，否则整个生成器会被当一个任务；二是 gather 在某个任务失败时不会取消其他任务，会留下孤儿协程继续跑，生产上更推荐 3.11 的 TaskGroup——一个失败自动取消全部，失败被聚合在 ExceptionGroup 里。"
+
+**追问链**：
+- 追问①："Semaphore 和信号量/连接池什么关系？" → 同一个思想：计数资源许可；数据库连接池本质也是限流。
+- 追问②："为什么 asyncio 要 `async with` 而不是 `with`？" → `__aenter__`/`__aexit__` 是异步协议，`with` 只能调同步方法。
+- 追问③："gather 的 return_exceptions 语义？" → True 时异常作为结果返回（不抛出），适合"部分失败也要全量结果"的批处理。
+- 追问④："TaskGroup 的异常怎么处理？" → `except* ValueError`（PEP 654），按类型分组处理，还能拿到 `.exceptions`。
+
+---
+
+## 3. `argparse` —— CLI 三件套
 
 ```python
 parser = argparse.ArgumentParser(description="...")
@@ -94,51 +90,71 @@ parser.add_argument("--mode", choices=["fast", "slow"])          # 枚举
 
 | 参数 | 不写的后果 |
 |---|---|
-| `type=int` | 拿到字符串 `"3"`，`args.count + 1` 直接 `TypeError` |
-| `choices=` | 任何垃圾值都接受，错误在深处才暴露 |
-| `action="store_true"` | 没有"开关"语义，得用 `--verbose 1` 这种丑写法 |
+| `type=int` | 拿到字符串 `"3"`，`args.count + 1` → `TypeError` |
+| `choices=` | 垃圾值都接受，错误在深处才暴露 |
+| `action="store_true"` | 没有开关语义，得写 `--verbose 1` |
 
 **属性名规则**：`--verbose` → `args.verbose`（去 `--`，`-` 转 `_`）。
 
-**和 kb-service 的联系**：FastAPI 的 `Query(ge=1, le=100)` 做的事和 `type=` / `choices=` 一模一样——**在入口处把非法值挡掉**。CLI 和 API 的参数校验是同一个思想。
+**与 FastAPI 的联系**：`Query(ge=1, le=100)` 与 `type=`/`choices=` 是同一个思想——**在入口处把非法值挡掉**。
 
-### 4. `@contextlib.contextmanager` —— 用生成器写 with
+### 面试问法："CLI 和 HTTP 接口有什么共同点？"
+
+**30 秒答案**："都是接口层：解析外部输入、校验、调用 service、把结果或错误翻译成协议。CLI 用 argparse 做类型和枚举校验、退出码表达成败；HTTP 用 Pydantic 校验请求体、状态码表达结果。业务逻辑不该知道自己被谁调用——这也是为什么 service 只抛领域异常，由最外层翻译成退出码或 HTTP 状态码。"
+
+---
+
+## 4. `@contextlib.contextmanager` —— 用生成器写 with
 
 ```python
 @contextlib.contextmanager
 def ex10_timer(label: str = "elapsed"):
-    start = time.perf_counter()   # ← __enter__（进入 with 时）
+    start = time.perf_counter()   # ← __enter__
     try:
         yield                     # ← 控制权交给 with 块
     finally:
-        ...                       # ← __exit__（离开 with 时，异常也保证执行）
+        ...                       # ← __exit__（异常也保证执行）
 ```
 
 **三条铁律**：
+1. `yield` **之前** = 进入逻辑，**之后** = 退出逻辑。
+2. **必须且只能 yield 一次**，否则 `RuntimeError: generator didn't yield`。
+3. 清理逻辑放 `try/finally`——**with 块里抛异常也保证清理执行**。
 
-1. `yield` **之前** = 进入逻辑，**之后** = 退出逻辑
-2. **必须且只能 yield 一次**，否则 `RuntimeError: generator didn't yield`
-3. 清理逻辑放 `try/finally`——**with 块里抛异常也保证清理执行**
-
-**面试问法**：不用装饰器怎么写？→ 手写一个类实现 `__enter__` / `__exit__`。装饰器版本是用生成器换掉类样板，等价但少写 10 行。
-
-### 5. `functools.lru_cache` —— 缓存与它的作用域
+手写类版本：
 
 ```python
-@lru_cache(maxsize=None)  # noqa: UP033 —— 生产等价写法是 @functools.cache
+class Timer:
+    def __enter__(self):
+        self.start = time.perf_counter(); return self
+    def __exit__(self, exc_type, exc, tb):
+        print(f"耗时 {time.perf_counter() - self.start:.4f}s")
+        return False        # False = 不吞异常
+```
+
+### 面试问法："contextmanager 装饰器的原理？"
+
+**30 秒答案**："它把生成器包装成上下文管理器：yield 之前是 `__enter__`，yield 之后是 `__exit__`，yield 的值就是 as 后面拿到的对象。所以清理逻辑必须放在 try/finally 里，否则 with 块抛异常时不会执行。要注意只能 yield 一次；`__exit__` 返回 True 会吞掉异常，默认返回 False 让它继续抛——吞异常是很多隐蔽 bug 的来源。"
+
+---
+
+## 5. `functools.lru_cache` —— 缓存跟着函数对象走
+
+```python
+@functools.lru_cache(maxsize=None)   # 生产等价写法：@functools.cache
 def _fib(n: int) -> int:
     if n < 2:
         return n
     return _fib(n - 1) + _fib(n - 2)
 ```
 
-**本日最值钱的一个认知：缓存跟着函数对象走**。
+**本日最值钱的认知：缓存跟着函数对象走。**
 
-- `_fib` 定义在**模块级** → 整个进程共享一个缓存，第二次调用 `fib(10)` 直接命中
-- 如果定义在**另一个函数内部** → 每次调用外层函数都会重新执行装饰器、**重建一个全新缓存**，缓存形同虚设
-- 自检输出实证了这一点：两次调用，`hits` 从 8 跳到 9，`misses` 停在 11 不变
+- 定义在**模块级** → 整个进程共享一个缓存，第二次 `fib(10)` 直接命中。
+- 定义在**另一个函数内部** → 每次调用外层函数都重新执行装饰器、**重建一个全新缓存**，缓存形同虚设。
+- 实证：两次调用，`hits` 从 8 跳到 9，`misses` 停在 11 不变。
 
-**ex11 的 before/after 对比技巧**（自己想出来的）：
+**before/after 对比技巧**（自己想出来的）：
 
 ```python
 before = _fib.cache_info()
@@ -147,11 +163,23 @@ after = _fib.cache_info()
 if after.hits > before.hits:   # 这次调用到底命中没有，一眼可判
 ```
 
-**cache_info 五个字段**：`hits`（命中）/ `misses`（未命中）/ `maxsize` / `currsize`（当前缓存条数）/ `maxsize=None` 时无淘汰。
+**cache_info 五字段**：`hits` / `misses` / `maxsize` / `currsize` / （maxsize=None 时无淘汰）。
 
-**什么时候不能用**：参数不可哈希（如 list）；函数有副作用（缓存会吞掉副作用）；参数空间无限增长（缓存撑爆内存）。
+**什么时候不能用**：参数不可哈希（list/dict）；函数有副作用（缓存会吞掉副作用）；参数空间无限增长（撑爆内存）。
 
-### 6. `StrEnum` + `defaultdict` —— 分组的最短路径
+### 面试问法："lru_cache 有什么用？有什么坑？"
+
+**30 秒答案**："它是进程内的 LRU 缓存装饰器，按参数做 key 缓存返回值，适合纯函数、重复调用、计算昂贵的场景，比如递归、配置读取、纯计算。坑有三个：一是参数必须可哈希，list/dict 不行；二是有副作用的函数不能缓存，副作用会被吞掉；三是缓存跟着函数对象走——如果装饰的函数定义在另一个函数内部，每次外层调用都会重建缓存，等于没缓存。另外在方法上用要小心 self 被当成 key 的一部分，实例不释放会导致内存泄漏。"
+
+**追问链**：
+- 追问①："maxsize=None 和给数字的区别？" → None 不淘汰（可能无限增长）；数字是 LRU 容量。`functools.cache` 等价于 `maxsize=None`。
+- 追问②："多线程安全吗？" → CPython 下内部有锁保护字典，但并发 miss 时会重复计算（没有单一飞行去重）；要严格去重得自己做锁。
+- 追问③："怎么手动失效？" → `cache_clear()`（测试换血）、`cache_info()` 观察命中；没有单 key 失效 API（`cache_parameters` 只读）。
+- 追问④："和 Redis 缓存的区别？" → 进程内、无网络开销、随进程消亡、不跨实例共享；Redis 跨进程共享但有网络与序列化成本。
+
+---
+
+## 6. `StrEnum` + `defaultdict` —— 分组的最短路径
 
 ```python
 grouped: dict[DocStatus, list[str]] = defaultdict(list)
@@ -159,80 +187,78 @@ for row in rows:
     grouped[DocStatus(row["status"])].append(row["id"])
 ```
 
-- `defaultdict(list)`：访问不存在的键**自动创建空列表**，省掉 `if key not in grouped` 分支
-- `DocStatus("ready")`：StrEnum **按值查找**成员；因为值就是 `"ready"`，字符串直接映射成枚举
-- 反向也成立：`DocStatus.READY == "ready"` 为 True（成员是 str 子类），所以它能无缝进 JSON、能当 dict 的 str 键用
+- `defaultdict(list)`：访问不存在的键**自动创建空列表**，省掉 `if key not in grouped`。
+- `DocStatus("ready")`：StrEnum **按值查找**成员；值就是 `"ready"`，字符串直接映射成枚举。
+- 反向成立：`DocStatus.READY == "ready"` 为 True（成员是 str 子类），能无缝进 JSON、能当 dict 的 str 键。
 
-**这和 kb-service 的关系**：`schemas/doc.py` 的 `DocStatus(StrEnum)` 就是这个写法——文档状态机 `pending → processing → ready / failed`，API 返回的 `"ready"` 字符串就是它。
+**与项目的关系**：`schemas/doc.py` 的 `DocStatus(StrEnum)` 就是这个写法——文档状态机 `pending → processing → ready / failed`，API 返回的 `"ready"` 就是它。
+
+### 面试问法："枚举和字符串常量怎么选？"
+
+**30 秒答案**："枚举有类型约束和自动补全，非法值在构造时就报错，比裸字符串安全；StrEnum 因为成员本身就是 str 子类，可以直接序列化成 JSON、能当字典键，兼顾了安全性和兼容性。它还能配状态机用——文档从 pending 到 processing 到 ready，用枚举比散落的字符串常量更容易做静态检查和穷举处理。"
 
 ---
 
-## 三、今天踩的坑
+## 7. 今天踩的坑
 
-### 坑 1 · `NameError: name 'lru_cache' is not defined`（本日主坑）
+### 坑 1 · `NameError: name 'lru_cache' is not defined`（主坑）
 
-**现象**：脚本一行都没跑就崩，12 道题看起来"全坏了"。
-
-**根因**：`@lru_cache` 是**模块级装饰器**，import 时立即执行；`functools` 没导入 → 加载即 `NameError`。对比：`argparse` 也没导入但没炸，因为它只在 ex09 **函数体内**用，函数不执行就不检查。
-
-**读报错三要素又立功**：`in <module>`（模块加载时）+ `not defined`（名字不存在）→ 直接指向"忘 import"。
-
-**一般规律**：**装饰器用到的名字必须在 import 区可见**，因为装饰发生在模块加载时，比任何函数调用都早。
+**现象**：脚本一行没跑就崩，12 道题看起来"全坏了"。
+**根因**：`@lru_cache` 是**模块级装饰器**，import 时立即执行；`functools` 没导入 → 加载即 NameError。对比 `argparse` 也没导入但没炸，因为它只在 ex09 **函数体内**用，函数不执行就不检查。
+**一般规律**：**装饰器用到的名字必须在 import 区可见**，装饰发生在模块加载时，比任何函数调用都早。
 
 ### 坑 2 · 写完代码顺手删了 docstring
 
-ex08 实现时把函数的 docstring 三行删掉了。docstring 是 API 文档的来源（`help()`、IDE 悬浮提示都读它），**写实现不等于可以删说明**。已恢复。
+docstring 是 API 文档来源（`help()`、IDE 悬浮都读它）。**写实现不等于可以删说明。**
 
 ### 坑 3 · 布局细节
 
-`_fib` 和 `ex11_fib_cached` 之间只有一个空行（PEP8 要求顶层定义间隔两个空行）；import 后的分节注释前多了空行。`ruff` 全部抓出来了——**这就是为什么格式交给工具管，不靠肉眼**。
+顶层定义间只留一个空行（PEP8 要两个）；import 后多空行。ruff 全抓出来——**格式交给工具，不靠肉眼**。
 
----
+## 8. 追问链总表
 
-## 四、自测 6 问（闭卷）
+| 起点 | 追问 | 你要能答 |
+|---|---|---|
+| Protocol | 运行时检查吗？ | 不检查，静态契约；`runtime_checkable` 只查方法名 |
+| Semaphore | 底层是什么？ | 计数器 + 等待队列（asyncio 的 Future 队列） |
+| gather | 为什么保序？ | 按传入顺序收集 result，与完成顺序无关 |
+| TaskGroup | 异常怎么捕获？ | `except*` 分组；`.exceptions` 拿全部 |
+| contextmanager | 能 yield 两次吗？ | 不能，RuntimeError |
+| lru_cache | 为什么在方法上危险？ | self 进 key，实例无法释放 → 泄漏 |
+| StrEnum | 和 Enum 区别？ | 成员是 str 子类，可 JSON 序列化、可与字符串比较 |
+| defaultdict | 和 setdefault 区别？ | 缺键自动补（`__missing__`）；setdefault 每次构造默认值 |
 
-1. `Protocol` 和 `ABC` 都能定义接口，什么时候必须用 ABC？
-2. `asyncio.gather` 的返回顺序由什么决定？一个任务抛异常时其余任务会怎样？
-3. `argparse` 里 `--count` 不写 `type=int`，`args.count` 是什么类型？会引发什么具体错误？
-4. `@contextmanager` 装饰的函数里 `yield` 写了两次会怎样？`try/finally` 防的是什么？
-5. 为什么 `_fib` 必须定义在模块级？定义在函数内部会发生什么？
-6. `defaultdict(list)` 访问不存在的键时发生什么？和 `dict.setdefault(k, [])` 的区别？
+## 9. 30 秒答案集
 
-<details>
-<summary>答案</summary>
+1. **Protocol** → 结构化子类型，零侵入，静态检查不运行期强制。
+2. **ABC 何时必须** → 需要运行期强制/共享实现/血统判断。
+3. **Semaphore** → 计数许可，控制并发数。
+4. **gather 保序** → 按传入顺序返回，与完成时间无关。
+5. **gather vs TaskGroup** → 孤儿任务 vs 自动取消 + 异常聚合。
+6. **contextmanager** → yield 前 `__enter__`、后 `__exit__`，清理放 finally。
+7. **lru_cache 作用域** → 缓存跟函数对象走；函数内定义等于没缓存。
+8. **StrEnum** → str 子类枚举，可序列化、可比较。
 
-1. 需要**运行时强制**时：ABC + `@abstractmethod` 能在子类实例化时立刻报错（漏实现就炸），Protocol 运行时不检查。另外要给第三方类"官方血统"（isinstance 判断、注册回调）时也用 ABC。
-2. 由**传入顺序**决定，与完成时间无关。默认 `return_exceptions=False` 时第一个异常直接抛出，**其余任务不会被取消**、继续跑成孤儿；TaskGroup 则会取消全部并聚合异常。
-3. 字符串 `"3"`。典型错误：`args.count + 1` 抛 `TypeError: can only concatenate str (not "int") to str`——错误发生在使用处而非解析处，难定位。
-4. `RuntimeError: generator didn't stop`（或 didn't yield 相关报错）。`try/finally` 防的是 with 块内抛异常时清理逻辑不执行——比如文件没关、锁没释放。
-5. 装饰器在**函数定义时**执行并创建缓存。定义在函数内部，每次调用外层函数都会重新装饰、生成新函数对象和新缓存——之前缓存的结果全部丢失，等于没缓存。
-6. 自动调用 `default_factory`（即 `list()`）创建空列表并插入，然后正常返回它。`setdefault` 每次都要**构造一个默认值对象**（哪怕键已存在，`[]` 也白建一次），且写起来是两步；`defaultdict` 把"缺键自动补"内置到 `__missing__` 里。
+## 10. 白板靶
 
+1. 用 `@contextmanager` 写一个计时器（含 try/finally）。
+2. 用 Semaphore + gather 写限并发批处理（5 行核心）。
+3. `defaultdict(list)` 分组 + `StrEnum` 状态转换。
+
+## 11. 闭卷自测
+
+1. Protocol 和 ABC 都能定义接口，什么时候必须用 ABC？
+2. `gather` 返回顺序由什么决定？一个任务抛异常其余会怎样？
+3. `--count` 不写 `type=int`，`args.count` 什么类型？引发什么错误？
+4. `@contextmanager` 里 yield 两次会怎样？`try/finally` 防什么？
+5. 为什么 `_fib` 必须定义在模块级？定义在函数内部会怎样？
+6. `defaultdict(list)` 与 `dict.setdefault(k, [])` 的区别？
+
+<details><summary>答案</summary>
+1. 需要运行期强制（漏实现即炸）、需要共享实现/模板方法、需要 isinstance 血统判断时。
+2. 传入顺序（与完成时间无关）；默认第一个异常直接抛，其余任务不被取消继续跑成孤儿。
+3. 字符串 "3"；`args.count + 1` → TypeError（错误发生在使用处）。
+4. RuntimeError（generator didn't yield/stop）；try/finally 保证异常时清理执行（文件关闭、锁释放）。
+5. 装饰器在定义时执行并建缓存；定义在函数内则每次外层调用重建缓存，等于没缓存。
+6. defaultdict 缺键自动创建（`__missing__`）；setdefault 每次会构造默认值对象，哪怕键已存在。
 </details>
-
----
-
-## 五、与项目的衔接
-
-| 今天练的 | 项目里的位置 | 什么时候用到 |
-|---|---|---|
-| `Protocol` | `repositories/` 的隐式接口 | W7 换 SQLAlchemy 时定义 Repository 协议 |
-| `Semaphore` | 并发爬取 / 批量 embedding | W12 批量向量化限流 |
-| `TaskGroup` | FastAPI 并发调用下游 | W9 异步与并发 |
-| `contextmanager` | `core/logging.py` 的 trace 上下文 | 已在用（思路同源） |
-| `lru_cache` | `core/config.py` 的 `get_settings()` | **现在就在用**（配置缓存） |
-| `StrEnum` | `schemas/doc.py` 的 `DocStatus` | **现在就在用**（文档状态机） |
-| `defaultdict` | W13 可观测聚合 | 按维度统计指标 |
-
-特别注意：**你 Day1 就见过的 `@lru_cache` 装饰 `get_settings()`，今天亲手写了一遍才真正懂它**。这也是"练习 → 回头看项目"的价值：项目里所有"当时看不懂"的代码，现在都该能看懂了。
-
----
-
-## 六、W1 剩余安排
-
-| 天 | 内容 | 性质 |
-|---|---|---|
-| Day6（周六 5h） | 抄改 300 行 + 跑通全部接口 | **检验"能不能独立写完整代码"** |
-| Day7（周日 5h） | 12 道闭卷自测 + 周复盘 + 打 tag | 检验"能不能讲出来" |
-
-Day6 的抄改规则提前说：**看 20 行 → 关掉 → 自己敲 → 对比差异**。不是复制粘贴。推荐顺序：`services/kb_service.py` → `core/logging.py`（ContextVar 是硬骨头，看不懂正常）。

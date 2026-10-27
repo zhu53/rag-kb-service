@@ -40,3 +40,4 @@ tmp/
 _tmp/
 
 # ---------- PyCharm 运行配置（.run/ 要提交，.idea/ 已忽略） ----------
+kbs.json

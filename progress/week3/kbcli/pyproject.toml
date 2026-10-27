@@ -1,0 +1,16 @@
+[project]
+name = "kbcli"
+version = "0.1.0"
+description = "命令行知识库工具：分层 + 配置 + 日志 + 缓存"
+requires-python = ">=3.11"
+dependencies = ["pydantic-settings>=2.4"]
+
+[project.scripts]
+kbcli = "kbcli.cli:main"
+
+[dependency-groups]
+dev = ["ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
