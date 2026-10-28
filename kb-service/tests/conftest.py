@@ -28,7 +28,12 @@ def auth_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(str(TEST_USER_ID))}"}
 
 
+@pytest.fixture(scope="session")
+def app():
+    return create_app()
+
+
 @pytest.fixture
-def client(auth_headers: dict[str, str]) -> Iterator[TestClient]:
-    with TestClient(create_app(), headers=auth_headers) as c:
+def client(app, auth_headers) -> Iterator[TestClient]:
+    with TestClient(app, headers=auth_headers) as c:
         yield c
