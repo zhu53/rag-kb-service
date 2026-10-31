@@ -24,6 +24,8 @@ dev = [
     "mypy>=1.13",
     "types-passlib",
     "pre-commit>=4.0",
+    "freezegun>=1.5.5",
+    "respx>=0.23.1",
 ]
 
 # 阶段解锁的依赖（到对应周次再取消注释）
