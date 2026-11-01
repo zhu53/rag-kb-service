@@ -82,7 +82,17 @@ minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra -q --strict-markers"
 asyncio_mode = "auto"
-filterwarnings = ["error::DeprecationWarning"]
+filterwarnings = [
+    "error::DeprecationWarning",
+    # 白名单：passlib 1.7.4（2020 年后停更）内部有一句 `from crypt import crypt`，
+    # 而 Python 3.11 起标准库 crypt 被标记为「3.13 移除」。
+    # 这是第三方库的历史包袱，不是我们的代码问题。
+    # 而且 crypt 是 Unix-only 模块：Windows 上根本没有这个文件，
+    # 这句 import 直接 ImportError、走 passlib 的 except 分支，所以本地永远看不到这条警告，
+    # 只在 Linux CI 上被 error::DeprecationWarning 变成致命错误 —— 典型的「本地绿、CI 红」。
+    # 等换掉 passlib（见 security.py）后这条可以删。
+    "ignore:'crypt' is deprecated:DeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["src/kb_service"]
