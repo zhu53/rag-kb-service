@@ -32,13 +32,17 @@ jobs:
 
       # 本地是一条命令（scripts/check.py），CI 这里是分步的——不是重复劳动。
       # 门禁是一条命令时，红了只知道"红了"；分步之后，"哪一层红"由 step 名字直接给出。
-      # 每步失败时再把报错尾行打成 annotation，省得去翻几千行日志。
+      #
+      # 失败信息统一用 tail 折成【一条】多行注解（%0A 是 workflow command 的换行转义）。
+      # 一行一条 echo 的写法踩过坑：GitHub 每个 check run 只展示前 10 条 failure 注解，
+      # 而 Python 的 import 链正好 10 层，结果最关键的 "E ImportError: ..." 被挤没了。
 
       - name: ruff check
         run: |
           set -o pipefail
           uv run python -m ruff check src tests scripts conftest.py 2>&1 | tee /tmp/step.log || {
-            tail -25 /tmp/step.log | sed -e 's/%/%25/g' -e 's/\r$//' -e '/^$/d' -e 's/^/::error::/'
+            MSG=$(tail -30 /tmp/step.log | sed -e 's/\r$//' -e 's/%/%25/g' | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')
+            echo "::error title=ruff check failed::${MSG}"
             exit 1
           }
 
@@ -46,7 +50,8 @@ jobs:
         run: |
           set -o pipefail
           uv run python -m ruff format --check src tests scripts conftest.py 2>&1 | tee /tmp/step.log || {
-            tail -25 /tmp/step.log | sed -e 's/%/%25/g' -e 's/\r$//' -e '/^$/d' -e 's/^/::error::/'
+            MSG=$(tail -30 /tmp/step.log | sed -e 's/\r$//' -e 's/%/%25/g' | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')
+            echo "::error title=ruff format failed::${MSG}"
             exit 1
           }
 
@@ -54,14 +59,35 @@ jobs:
         run: |
           set -o pipefail
           uv run python -m pytest --cov --cov-report=term-missing --cov-fail-under=95 2>&1 | tee /tmp/step.log || {
-            tail -45 /tmp/step.log | sed -e 's/%/%25/g' -e 's/\r$//' -e '/^$/d' -e 's/^/::error::/'
+            MSG=$(tail -60 /tmp/step.log | sed -e 's/\r$//' -e 's/%/%25/g' | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')
+            echo "::error title=pytest failed::${MSG}"
             exit 1
           }
+
+      # 只在前面失败时才跑：绕开 pytest，直接 import，让异常自己说人话。
+      # pytest 会把 import 期异常包成 "ImportError while loading conftest"，
+      # 真正的原因（缺哪个模块 / 版本不兼容）藏在最后一行的 E 后面。
+      - name: Diagnose import failure
+        if: failure()
+        run: |
+          {
+            echo "--- python / 依赖版本 ---"
+            uv run python -V 2>&1 || true
+            uv run python -c "import passlib; print('passlib', passlib.__version__)" 2>&1 | tail -5 || true
+            uv run python -c "import bcrypt; print('bcrypt', bcrypt.__version__)" 2>&1 | tail -5 || true
+            echo "--- passlib.utils.decor 里到底有没有 deprecated_method ---"
+            uv run python -c "import passlib.utils.decor as d; print([n for n in dir(d) if 'deprecat' in n])" 2>&1 | tail -5 || true
+            echo "--- 直接 import CryptContext（不经过 pytest） ---"
+            uv run python -c "from passlib.context import CryptContext; print('CryptContext ok')" 2>&1 | tail -20 || true
+          } > /tmp/diag.log 2>&1
+          MSG=$(sed -e 's/\r$//' -e 's/%/%25/g' /tmp/diag.log | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')
+          echo "::error title=diagnose::${MSG}"
 
       - name: mutation
         run: |
           set -o pipefail
           uv run python scripts/mutation_check.py 2>&1 | tee /tmp/step.log || {
-            tail -25 /tmp/step.log | sed -e 's/%/%25/g' -e 's/\r$//' -e '/^$/d' -e 's/^/::error::/'
+            MSG=$(tail -30 /tmp/step.log | sed -e 's/\r$//' -e 's/%/%25/g' | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')
+            echo "::error title=mutation failed::${MSG}"
             exit 1
           }
