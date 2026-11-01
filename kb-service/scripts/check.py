@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 COV_FLOOR = 95  # 覆盖率下限（百分比）
-TARGETS = ["src", "tests", "scripts"]
+TARGETS = ["src", "tests", "scripts", "conftest.py"]
 
 
 def step(name: str, cmd: list[str]) -> bool:
