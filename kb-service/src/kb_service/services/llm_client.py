@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import httpx
 
 
@@ -38,4 +40,7 @@ class LLMClient:
                 },
             )
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+            # resp.json() 返回 Any：HTTP 响应体里是什么只有运行时才知道。
+            # 这里 cast(str, ...) 是"我保证了 JSON 结构"的声明，代价是如果 API
+            # 改结构这里不会有人替你挡——所以 W14 换成带 pydantic 模型校验的版本。
+            return cast(str, resp.json()["choices"][0]["message"]["content"])

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -18,8 +19,12 @@ ALICE = uuid4()
 BOB = uuid4()
 
 
-def _calls_named(repo: FakeKBRepo, name: str) -> list:
-    """从账本里按方法名过滤——断言'没发生'用这个，不要断言账本全空。"""
+def _calls_named(repo: FakeKBRepo, name: str) -> list[tuple[str, tuple[Any, ...]]]:
+    """从账本里按方法名过滤——断言'没发生'用这个，不要断言账本全空。
+
+    返回类型照着 FakeKBRepo.calls 的真实结构写：每笔调用是
+    (方法名, 参数元组)，不是裸 list。
+    """
     return [c for c in repo.calls if c[0] == name]
 
 
@@ -32,7 +37,7 @@ def _svc_with_kb(owner: UUID) -> tuple[KBService, FakeKBRepo, UUID]:
     return svc, repo, row["id"]
 
 
-def test_create_returns_kbout():
+def test_create_returns_kbout() -> None:
     """create 链路：repo 行 → Pydantic 模型。返回的是 KBOut 对象，用属性访问。"""
     repo = FakeKBRepo()
     svc = KBService(repo=repo)
@@ -43,7 +48,7 @@ def test_create_returns_kbout():
     assert repo.calls[0] == ("create", (ALICE, "新库"))
 
 
-def test_missing_kb_raises_not_found():
+def test_missing_kb_raises_not_found() -> None:
     """404 规则：查不存在的 id。"""
     svc, repo, _ = _svc_with_kb(ALICE)
     missing = uuid4()
@@ -52,7 +57,7 @@ def test_missing_kb_raises_not_found():
     assert repo.calls[0] == ("get", (missing,))
 
 
-def test_other_users_kb_raises_forbidden():
+def test_other_users_kb_raises_forbidden() -> None:
     """403 规则：别人的库。
 
     注意：403 之前 service 必须先 repo.get 看 owner_id——
@@ -64,7 +69,7 @@ def test_other_users_kb_raises_forbidden():
     assert [c[0] for c in repo.calls] == ["get"]
 
 
-def test_own_kb_returns_row():
+def test_own_kb_returns_row() -> None:
     """正常路径：自己的库原样返回。"""
     svc, repo, kb_id = _svc_with_kb(ALICE)
     row = svc.get_or_403(kb_id, ALICE)
@@ -73,7 +78,7 @@ def test_own_kb_returns_row():
     assert repo.calls[0] == ("get", (kb_id,))
 
 
-def test_delete_without_permission_repo_not_called():
+def test_delete_without_permission_repo_not_called() -> None:
     """先鉴权后删除：无权时 ForbiddenError，且 repo.delete 绝不能被调。"""
     svc, repo, kb_id = _svc_with_kb(ALICE)
     with pytest.raises(ForbiddenError):
@@ -81,7 +86,7 @@ def test_delete_without_permission_repo_not_called():
     assert _calls_named(repo, "delete") == []
 
 
-def test_update_missing_raises_not_found():
+def test_update_missing_raises_not_found() -> None:
     """update 不存在的 id：get_or_403 先抛 404，永远走不到 repo.update。"""
     svc, repo, _ = _svc_with_kb(ALICE)
     with pytest.raises(NotFoundError):
@@ -89,14 +94,14 @@ def test_update_missing_raises_not_found():
     assert _calls_named(repo, "update") == []
 
 
-def test_list_offset_computed_from_page():
+def test_list_offset_computed_from_page() -> None:
     """分页计算：page=3, size=10 → offset=(3-1)*10=20，参数原样传给 repo。"""
     svc, repo, _ = _svc_with_kb(ALICE)
     svc.list(ALICE, page=3, size=10)
     assert repo.calls[0] == ("list_by_owner", (ALICE, 20, 10))
 
 
-def test_count_owned_delegates():
+def test_count_owned_delegates() -> None:
     """委托链路：count_owned 只数自己的（BOB 的库不算）。"""
     repo = FakeKBRepo()
     svc = KBService(repo=repo)

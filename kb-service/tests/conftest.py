@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from uuid import UUID
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from kb_service.core.security import create_access_token
@@ -29,11 +30,11 @@ def auth_headers() -> dict[str, str]:
 
 
 @pytest.fixture(scope="session")
-def app():
+def app() -> FastAPI:
     return create_app()
 
 
 @pytest.fixture
-def client(app, auth_headers) -> Iterator[TestClient]:
+def client(app: FastAPI, auth_headers: dict[str, str]) -> Iterator[TestClient]:
     with TestClient(app, headers=auth_headers) as c:
         yield c

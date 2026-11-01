@@ -42,4 +42,7 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     """缓存配置实例；测试里用 get_settings.cache_clear() 重置。"""
-    return Settings()  # type: ignore[call-arg]
+    # 这里曾经挂过 `# type: ignore[call-arg]`：pydantic v2 的 mypy 插件
+    # 会把 BaseSettings 的必填字段当成「可由环境变量提供」，无参调用是合法的。
+    # 所以那条 ignore 已经没用 → mypy strict 报 unused-ignore，删掉。
+    return Settings()

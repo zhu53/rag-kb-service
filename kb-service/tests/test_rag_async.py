@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -19,10 +20,10 @@ USER_ID = UUID("22222222-2222-4222-8222-222222222222")
 class FakeDocRepo:
     """doc_repo 契约的内存 fake：list_by_kb 返回 (rows, total)。"""
 
-    def __init__(self, rows: list[dict] | None = None) -> None:
+    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
         self.rows = rows or []
 
-    def list_by_kb(self, kb_id: UUID, offset: int, limit: int):
+    def list_by_kb(self, kb_id: UUID, offset: int, limit: int) -> tuple[list[dict[str, Any]], int]:
         rows = [r for r in self.rows if r["kb_id"] == kb_id]
         return rows[offset : offset + limit], len(rows)
 
@@ -30,11 +31,11 @@ class FakeDocRepo:
 class FakeKBService:
     """kb_service 的最小替身：鉴权恒通过。"""
 
-    def get_or_403(self, kb_id: UUID, user_id: UUID) -> dict:
+    def get_or_403(self, kb_id: UUID, user_id: UUID) -> dict[str, Any]:
         return {"id": kb_id}
 
 
-def _doc_row(kb_id: UUID, content: str) -> dict:
+def _doc_row(kb_id: UUID, content: str) -> dict[str, Any]:
     now = datetime.now(UTC)
     return {
         "id": uuid4(),
@@ -57,7 +58,7 @@ async def async_client() -> AsyncIterator[AsyncClient]:
         yield client
 
 
-async def test_answer_no_sources(monkeypatch):
+async def test_answer_no_sources(monkeypatch: pytest.MonkeyPatch) -> None:
     svc = RagService(doc_repo=FakeDocRepo())
     monkeypatch.setattr(svc, "kb_service", FakeKBService())
 
@@ -67,7 +68,7 @@ async def test_answer_no_sources(monkeypatch):
     assert "没有找到" in result.answer
 
 
-async def test_answer_with_sources(monkeypatch):
+async def test_answer_with_sources(monkeypatch: pytest.MonkeyPatch) -> None:
     kb_id = uuid4()
     repo = FakeDocRepo([_doc_row(kb_id, "RAG 是检索增强生成，先检索再生成。")])
     svc = RagService(doc_repo=repo)
@@ -79,7 +80,7 @@ async def test_answer_with_sources(monkeypatch):
     assert "RAG 是检索增强生成" in result.answer
 
 
-async def test_answer_stream_chunks(monkeypatch):
+async def test_answer_stream_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
     kb_id = uuid4()
     repo = FakeDocRepo([_doc_row(kb_id, "RAG 是检索增强生成，先检索再生成。")])
     svc = RagService(doc_repo=repo)
@@ -92,7 +93,7 @@ async def test_answer_stream_chunks(monkeypatch):
     assert chunks[-1] == "data: [DONE]\n\n"
 
 
-async def test_chat_sse_via_async_client(monkeypatch):
+async def test_chat_sse_via_async_client(monkeypatch: pytest.MonkeyPatch) -> None:
     """集成：先在 store 里种一个 kb + 一篇文档，再走真实路由。"""
     app = create_app()
 
@@ -126,7 +127,7 @@ async def test_chat_sse_via_async_client(monkeypatch):
     # 而不是 monkeypatch 业务对象，因为这样走完整路由栈。
     from kb_service.api.deps import get_current_user_id  # 按你项目的真实路径替换
 
-    async def _fake_user_id():
+    async def _fake_user_id() -> UUID:
         return USER_ID
 
     app.dependency_overrides[get_current_user_id] = _fake_user_id
@@ -155,7 +156,7 @@ async def test_chat_sse_via_async_client(monkeypatch):
         store.docs.pop(doc_id, None)
 
 
-async def test_chat_requires_auth(async_client):
+async def test_chat_requires_auth(async_client: AsyncClient) -> None:
     # 不带 Authorization 头打 /api/v1/chat，断言 401 + code == "UNAUTHORIZED"
     response = await async_client.post(
         "/api/v1/chat",

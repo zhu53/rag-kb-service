@@ -9,15 +9,17 @@
 
 repos:
   # ---- ruff：lint + 格式化 ----
+  # 范围与项目门禁（kb-service/scripts/check.py）保持一致：
+  #   kb-service/ = 项目代码；reviews/ = 第四档题面（同一套规则，否则题面风格和项目脱节）
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # 与 kb-service/.venv 里的 ruff 0.17.1 保持一致，避免 hook 和本地规则打架
     rev: v0.17.1
     hooks:
       - id: ruff-check
         args: [--fix]
-        files: ^kb-service/
+        files: ^(kb-service|reviews)/
       - id: ruff-format
-        files: ^kb-service/
+        files: ^(kb-service|reviews)/
 
   # ---- 通用卫生检查（不依赖 Python）----
   - repo: https://github.com/pre-commit/pre-commit-hooks

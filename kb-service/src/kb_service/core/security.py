@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -30,7 +30,11 @@ def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> st
         "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
         **(extra or {}),
     }
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+    # python-jose 没有类型标注（pyproject 里 ignore_missing_imports），jwt.encode
+    # 被 mypy 视为 Any。这里用 cast 声明"我知道它返回 str"：运行时 jose 确实返回 str。
+    # 用 cast 而不是 str(...) 是因为 str() 会悄悄改变行为（万一返回 bytes 会被转成
+    # "b'...'"），cast 是零运行时开销的纯声明，错了会在下游立刻暴露。
+    return cast(str, jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm))
 
 
 def decode_access_token(token: str) -> dict[str, Any]:

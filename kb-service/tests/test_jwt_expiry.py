@@ -9,7 +9,7 @@ from kb_service.core.exceptions import UnauthorizedError
 from kb_service.core.security import create_access_token, decode_access_token
 
 
-def test_fresh_token_roundtrip():
+def test_fresh_token_roundtrip() -> None:
     """冻结时刻签发并解码，sub 能读回来。"""
     with freeze_time("2026-01-01 00:00:00"):
         token = create_access_token("user-1")
@@ -17,7 +17,7 @@ def test_fresh_token_roundtrip():
         assert payload["sub"] == "user-1"
 
 
-def test_expired_token_rejected():
+def test_expired_token_rejected() -> None:
     """两段式冻结：先签发，再跳到 +61 分钟，应被拒绝。"""
     with freeze_time("2026-01-01 00:00:00") as frozen:
         token = create_access_token("user-1")
@@ -28,7 +28,7 @@ def test_expired_token_rejected():
             decode_access_token(token)
 
 
-def test_token_valid_at_59min():
+def test_token_valid_at_59min() -> None:
     """+59 分钟仍能解码，避免只测过期一侧。"""
     with freeze_time("2026-01-01 00:00:00") as frozen:
         token = create_access_token("user-1")
@@ -37,7 +37,7 @@ def test_token_valid_at_59min():
         assert payload["sub"] == "user-1"
 
 
-def test_boundary_exactly_60min_still_valid():
+def test_boundary_exactly_60min_still_valid() -> None:
     """恰好 +60 分钟仍不抛异常：记录当前 jose 实测行为。
 
     实测发现：当 exp 由 datetime.utcnow() + timedelta(minutes=60) 生成时，

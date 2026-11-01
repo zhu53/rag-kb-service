@@ -13,9 +13,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1]  # kb-service/
+REPO = ROOT.parent  # 仓库根
 COV_FLOOR = 95  # 覆盖率下限（百分比）
 TARGETS = ["src", "tests", "scripts", "conftest.py"]
+# 第四档题面：在仓库根 reviews/ 下，和项目代码分开。
+# 只做 ruff 检查（风格必须干净，否则题面本身就有噪音），
+# **不**进 pytest / 覆盖率 / mypy——它是练习题，不是交付物，不能抬高门禁指标。
+REVIEWS = [str(REPO / "reviews")]
 
 
 def step(name: str, cmd: list[str]) -> bool:
@@ -29,8 +34,11 @@ def main() -> int:
     with_mutation = "--mutation" in sys.argv
 
     checks = [
-        ("ruff check", [sys.executable, "-m", "ruff", "check", *TARGETS]),
-        ("ruff format --check", [sys.executable, "-m", "ruff", "format", "--check", *TARGETS]),
+        ("ruff check", [sys.executable, "-m", "ruff", "check", *TARGETS, *REVIEWS]),
+        (
+            "ruff format --check",
+            [sys.executable, "-m", "ruff", "format", "--check", *TARGETS, *REVIEWS],
+        ),
         (
             f"pytest + 覆盖率门禁 ({COV_FLOOR}%)",
             [

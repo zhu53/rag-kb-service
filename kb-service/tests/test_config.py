@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -7,7 +10,7 @@ from kb_service.core.config import Settings, get_settings
 
 
 @pytest.fixture(autouse=True)
-def _clear_settings_cache():
+def _clear_settings_cache() -> Iterator[None]:
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -16,7 +19,7 @@ def _clear_settings_cache():
 MINIMAL_SECRET = "test-secret-key-0123456789"  # ≥16 位，pydantic 的 min_length 要求
 
 
-def test_defaults(monkeypatch):
+def test_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     """喂饱必需字段后，其余全取代码默认值。"""
     monkeypatch.delenv("LOG_LEVEL", raising=False)
     monkeypatch.setenv("SECRET_KEY", MINIMAL_SECRET)  # ← 补这一行：把必填项喂饱
@@ -25,14 +28,14 @@ def test_defaults(monkeypatch):
     assert s.env == "dev"  # 顺手多验两个默认值，反正免费
 
 
-def test_env_var_overrides_default(monkeypatch):
+def test_env_var_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SECRET_KEY", MINIMAL_SECRET)  # ← 同样要补
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     s = Settings(_env_file=None)
     assert s.log_level == "DEBUG"
 
 
-def test_env_file_provides_value(tmp_path, monkeypatch):
+def test_env_file_provides_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证 .env 文件能提供值（且优先级高于代码默认值）。"""
     env_file = tmp_path / ".env"
     env_file.write_text(f"SECRET_KEY={MINIMAL_SECRET}\nLOG_LEVEL=DEBUG")
@@ -41,7 +44,7 @@ def test_env_file_provides_value(tmp_path, monkeypatch):
     assert s.log_level == "DEBUG"
 
 
-def test_env_var_beats_env_file(tmp_path, monkeypatch):
+def test_env_var_beats_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证 环境变量 > .env 文件。"""
     monkeypatch.setenv("LOG_LEVEL", "INFO")
     env_file = tmp_path / ".env"
@@ -50,13 +53,13 @@ def test_env_var_beats_env_file(tmp_path, monkeypatch):
     assert s.log_level == "INFO"
 
 
-def test_secret_key_too_short_raises(monkeypatch):
+def test_secret_key_too_short_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SECRET_KEY", "123")
     with pytest.raises(ValidationError, match="at least 16 characters"):
         Settings(_env_file=None)
 
 
-def test_get_settings_cached(monkeypatch):
+def test_get_settings_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     """get_settings() 的 lru_cache：环境变了拿的还是旧对象；cache_clear 后才见新值。"""
     monkeypatch.setenv("SECRET_KEY", MINIMAL_SECRET)
     monkeypatch.setenv("LOG_LEVEL", "INFO")

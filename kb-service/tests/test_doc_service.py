@@ -123,11 +123,18 @@ def test_delete_decrements_doc_count(world: World) -> None:
     """删文档时知识库的 doc_count 必须 -1（写成 +1 这里就红）。"""
     row = world.doc_repo.create(world.kb_id, DocCreate(title="文档1", content="内容"))
     world.kb_repo.incr_doc_count(world.kb_id, 1)
-    assert world.kb_repo.get(world.kb_id)["doc_count"] == 1
+    # repo.get 返回 dict | None，直接下标 mypy 会报 [index]。
+    # 断言不为 None 既是收窄（告诉 mypy 下面安全），也是一条真断言：
+    # 库不存在时这里立刻红，而不是等下钻出一个看不懂的 TypeError。
+    kb = world.kb_repo.get(world.kb_id)
+    assert kb is not None
+    assert kb["doc_count"] == 1
 
     world.svc.delete(row["id"], world.owner)
 
-    assert world.kb_repo.get(world.kb_id)["doc_count"] == 0
+    kb_after = world.kb_repo.get(world.kb_id)
+    assert kb_after is not None
+    assert kb_after["doc_count"] == 0
 
 
 def test_delete_missing_raises_not_found(world: World) -> None:

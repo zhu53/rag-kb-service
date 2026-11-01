@@ -19,7 +19,7 @@ def llm_client() -> LLMClient:
 
 
 @respx.mock
-async def test_chat_success(llm_client: LLMClient):
+async def test_chat_success(llm_client: LLMClient) -> None:
     route = respx.post("https://llm.example.test/chat/completions").mock(
         return_value=httpx.Response(
             200,
@@ -33,7 +33,7 @@ async def test_chat_success(llm_client: LLMClient):
 
 
 @respx.mock
-async def test_request_shape(llm_client: LLMClient):
+async def test_request_shape(llm_client: LLMClient) -> None:
     respx.post("https://llm.example.test/chat/completions").mock(
         return_value=httpx.Response(
             200,
@@ -52,7 +52,7 @@ async def test_request_shape(llm_client: LLMClient):
 
 
 @respx.mock
-async def test_500_raises_status_error(llm_client: LLMClient):
+async def test_500_raises_status_error(llm_client: LLMClient) -> None:
     respx.post("https://llm.example.test/chat/completions").mock(
         return_value=httpx.Response(500, json={"error": "server error"})
     )
@@ -62,7 +62,7 @@ async def test_500_raises_status_error(llm_client: LLMClient):
 
 
 @respx.mock
-async def test_timeout_raises(llm_client: LLMClient):
+async def test_timeout_raises(llm_client: LLMClient) -> None:
     respx.post("https://llm.example.test/chat/completions").mock(
         side_effect=httpx.ConnectTimeout("boom")
     )

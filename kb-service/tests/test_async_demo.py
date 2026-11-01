@@ -1,5 +1,7 @@
 """我的第一个异步测试。"""
 
+from collections.abc import AsyncIterator
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -8,7 +10,7 @@ from kb_service.main import create_app
 
 
 @pytest.fixture
-async def async_client():
+async def async_client() -> AsyncIterator[AsyncClient]:
     """async fixture：yield 前后各有一段异步生命周期。"""
     app = create_app()
     transport = ASGITransport(app=app)
@@ -22,7 +24,7 @@ async def async_client():
         yield client
 
 
-async def test_health_async(async_client):
+async def test_health_async(async_client: AsyncClient) -> None:
     resp = await async_client.get("/api/v1/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"

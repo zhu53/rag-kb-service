@@ -72,6 +72,8 @@ strict = true
 plugins = ["pydantic.mypy"]
 warn_unreachable = true
 disallow_untyped_decorators = false
+mypy_path = "src"
+explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 module = ["passlib.*", "jose.*"]

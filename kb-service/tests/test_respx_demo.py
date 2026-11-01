@@ -2,7 +2,7 @@ import httpx
 import respx
 
 
-async def test_http_is_mocked():
+async def test_http_is_mocked() -> None:
     with respx.mock:
         respx.post("https://api.example.com/v1/chat").respond(json={"reply": "假的"})
         async with httpx.AsyncClient(base_url="https://api.example.com") as client:
