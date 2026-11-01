@@ -22,6 +22,46 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
-      # CI 不写任何新逻辑：本地跑什么，这里就跑什么
-      - name: Quality gate
-        run: uv run python scripts/check.py --mutation
+      # 排查用：把平台和关键工具版本固化进日志。
+      # "本地绿、CI 红"的案子，第一步永远是先确认两边到底哪里不一样。
+      - name: Environment
+        run: |
+          uv --version
+          uv run python -V
+          uv run python -c "import platform, sys; print(platform.platform()); print(sys.version)"
+
+      # 本地是一条命令（scripts/check.py），CI 这里是分步的——不是重复劳动。
+      # 门禁是一条命令时，红了只知道"红了"；分步之后，"哪一层红"由 step 名字直接给出。
+      # 每步失败时再把报错尾行打成 annotation，省得去翻几千行日志。
+
+      - name: ruff check
+        run: |
+          set -o pipefail
+          uv run python -m ruff check src tests scripts conftest.py 2>&1 | tee /tmp/step.log || {
+            tail -25 /tmp/step.log | sed -e 's/%/%25/g' -e 's/\r$//' -e '/^$/d' -e 's/^/::error::/'
+            exit 1
+          }
+
+      - name: ruff format --check
+        run: |
+          set -o pipefail
+          uv run python -m ruff format --check src tests scripts conftest.py 2>&1 | tee /tmp/step.log || {
+            tail -25 /tmp/step.log | sed -e 's/%/%25/g' -e 's/\r$//' -e '/^$/d' -e 's/^/::error::/'
+            exit 1
+          }
+
+      - name: pytest + coverage
+        run: |
+          set -o pipefail
+          uv run python -m pytest --cov --cov-report=term-missing --cov-fail-under=95 2>&1 | tee /tmp/step.log || {
+            tail -45 /tmp/step.log | sed -e 's/%/%25/g' -e 's/\r$//' -e '/^$/d' -e 's/^/::error::/'
+            exit 1
+          }
+
+      - name: mutation
+        run: |
+          set -o pipefail
+          uv run python scripts/mutation_check.py 2>&1 | tee /tmp/step.log || {
+            tail -25 /tmp/step.log | sed -e 's/%/%25/g' -e 's/\r$//' -e '/^$/d' -e 's/^/::error::/'
+            exit 1
+          }
