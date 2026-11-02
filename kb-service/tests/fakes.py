@@ -70,3 +70,8 @@ class FakeKBRepo:
     def delete(self, kb_id: UUID) -> bool:
         self._log("delete", (kb_id,))
         return self.kbs.pop(kb_id, None) is not None
+
+    def incr_doc_count(self, kb_id: UUID, delta: int) -> None:
+        self._log("incr_doc_count", (kb_id, delta))
+        if row := self.kbs.get(kb_id):
+            row["doc_count"] = max(0, row["doc_count"] + delta)

@@ -6,6 +6,7 @@ from uuid import UUID
 from kb_service.core.exceptions import NotFoundError
 from kb_service.repositories.doc_repo import DocRepository
 from kb_service.repositories.kb_repo import KBRepository
+from kb_service.repositories.protocols import DocRepo, KBRepo
 from kb_service.schemas.doc import DocCreate, DocOut
 from kb_service.schemas.kb import Page
 from kb_service.services.kb_service import KBService
@@ -14,8 +15,8 @@ from kb_service.services.kb_service import KBService
 class DocService:
     def __init__(
         self,
-        repo: DocRepository | None = None,
-        kb_repo: KBRepository | None = None,
+        repo: DocRepo | None = None,
+        kb_repo: KBRepo | None = None,
     ) -> None:
         self.repo = repo or DocRepository()
         self.kb_service = KBService(kb_repo or KBRepository())

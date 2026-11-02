@@ -32,7 +32,7 @@ python-backend-roadmap/
 ```
 review_<序号>_<主题>.py
         │        └─ 给人看的线索，但**不能泄露坑的位置**
-        └─ 第几次第四档（全局连续，当前到 11）
+        └─ 第几次第四档（全局连续，当前到 12）
 ```
 
 - 序号**连续递增且全局唯一**，与周次、天数无关
@@ -74,7 +74,7 @@ cd /c/Users/acer-pc/WorkBuddy/2026-10-20-08-44-29/python-backend-roadmap
 | 3 个 | 真懂 |
 | 全部 | 全对 |
 
-## 现有清单（11 题）
+## 现有清单（12 题）
 
 | # | 文件 | 主题 | 出自 | 原名 | 得分 |
 |---|---|---|---|---|---|
@@ -89,6 +89,7 @@ cd /c/Users/acer-pc/WorkBuddy/2026-10-20-08-44-29/python-backend-roadmap
 | 09 | `review_09_cache.py` | 会话 TTL 缓存 + 异步自检（慢与脆） | W4-D4 | `review_06_cache` | 2.5/4 |
 | 10 | `review_10_gateway.py` | LLM 网关：缓存 + 时间 + 外部 HTTP | W4-D5 | `review_07_gateway` | 1/4 |
 | 11 | `review_11_typing.py` | 文档视图装配：返回值 / 参数 / `cast` | W5-D1 | `review_08_typing` | **3/3** |
+| 12 | `review_12_ports.py` | 文档端口：变异写反 / `object` 返回值 / `isinstance` 假阳性 | W5-D2 | — | **4/4** |
 
 > `04` 和 `08` 都叫 notes，但完全不同：04 考**分层**（存取与业务规则分离），08 考**测试替身**（fake repo 与交互断言）。
 

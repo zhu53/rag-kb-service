@@ -5,6 +5,7 @@ from uuid import UUID
 
 from kb_service.core.exceptions import ForbiddenError, NotFoundError
 from kb_service.repositories.kb_repo import KBRepository
+from kb_service.repositories.protocols import KBRepo
 from kb_service.schemas.kb import KBCreate, KBOut, KBUpdate, Page
 
 
@@ -15,7 +16,7 @@ class KBService:
     这是"分层"在面试中最容易讲清楚的价值点。
     """
 
-    def __init__(self, repo: KBRepository | None = None) -> None:
+    def __init__(self, repo: KBRepo | None = None) -> None:
         self.repo = repo or KBRepository()
 
     def create(self, owner_id: UUID, data: KBCreate) -> KBOut:

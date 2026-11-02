@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from uuid import UUID
 
 from kb_service.repositories.doc_repo import DocRepository
+from kb_service.repositories.protocols import DocReader
 from kb_service.schemas.chat import ChatResponse, ChatSource
 from kb_service.services.kb_service import KBService
 
@@ -19,7 +20,7 @@ class RagService:
       W16: 评测脚本对比改动前后的 Recall@K / 忠实度
     """
 
-    def __init__(self, doc_repo: DocRepository | None = None) -> None:
+    def __init__(self, doc_repo: DocReader | None = None) -> None:
         self.doc_repo = doc_repo or DocRepository()
         self.kb_service = KBService()
         self._llm: object | None = None
