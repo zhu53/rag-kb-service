@@ -32,7 +32,7 @@ python-backend-roadmap/
 ```
 review_<序号>_<主题>.py
         │        └─ 给人看的线索，但**不能泄露坑的位置**
-        └─ 第几次第四档（全局连续，当前到 13）
+        └─ 第几次第四档（全局连续，当前到 14）
 ```
 
 - 序号**连续递增且全局唯一**，与周次、天数无关
@@ -74,7 +74,7 @@ cd /c/Users/acer-pc/WorkBuddy/2026-10-20-08-44-29/python-backend-roadmap
 | 3 个 | 真懂 |
 | 全部 | 全对 |
 
-## 现有清单（13 题）
+## 现有清单（14 题）
 
 | # | 文件 | 主题 | 出自 | 原名 | 得分 |
 |---|---|---|---|---|---|
@@ -91,6 +91,7 @@ cd /c/Users/acer-pc/WorkBuddy/2026-10-20-08-44-29/python-backend-roadmap
 | 11 | `review_11_typing.py` | 文档视图装配：返回值 / 参数 / `cast` | W5-D1 | `review_08_typing` | **3/3** |
 | 12 | `review_12_ports.py` | 文档端口：变异写反 / `object` 返回值 / `isinstance` 假阳性 | W5-D2 | — | **4/4** |
 | 13 | `review_13_precise.py` | 文档索引：`total=False` 取值 / overload 漏分支 / `cast` 污染 Literal / `or` 吃空串 | W5-D3 | — | **2/4**（坑 2、3 中；坑 1 偏成 status 收窄；坑 4 位置对但机理错） |
+| 14 | `review_14_vendor.py` | 行情网关：`cast` 无校验 / `or` 吃 0 / `except Exception` 吞错 / `total=False` 取值 | W5-D4 | — | 待做 |
 
 > `04` 和 `08` 都叫 notes，但完全不同：04 考**分层**（存取与业务规则分离），08 考**测试替身**（fake repo 与交互断言）。
 
