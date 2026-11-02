@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from kb_service.repositories.base import store
+from kb_service.repositories.rows import KBRow
 from kb_service.schemas.kb import KBCreate, KBUpdate
 
 
@@ -13,10 +14,10 @@ class KBRepository:
     W7 TODO：改成 SQLAlchemy 2.0（async session），方法签名保持不变。
     """
 
-    def create(self, owner_id: UUID, data: KBCreate) -> dict[str, Any]:
+    def create(self, owner_id: UUID, data: KBCreate) -> KBRow:
         kb_id = store.new_id()
         now = store.now()
-        row: dict[str, Any] = {
+        row: KBRow = {
             "id": kb_id,
             "owner_id": owner_id,
             "name": data.name,
@@ -28,12 +29,10 @@ class KBRepository:
         store.kbs[kb_id] = row
         return row
 
-    def get(self, kb_id: UUID) -> dict[str, Any] | None:
+    def get(self, kb_id: UUID) -> KBRow | None:
         return store.kbs.get(kb_id)
 
-    def list_by_owner(
-        self, owner_id: UUID, offset: int, limit: int
-    ) -> tuple[list[dict[str, Any]], int]:
+    def list_by_owner(self, owner_id: UUID, offset: int, limit: int) -> tuple[list[KBRow], int]:
         rows = [r for r in store.kbs.values() if r["owner_id"] == owner_id]
         rows.sort(key=lambda r: r["created_at"], reverse=True)
         return rows[offset : offset + limit], len(rows)
@@ -42,12 +41,12 @@ class KBRepository:
         """统计该主人名下知识库数量。W7改成 SELECT COUNT(*)."""
         return sum(1 for r in store.kbs.values() if r["owner_id"] == owner_id)
 
-    def update(self, kb_id: UUID, data: KBUpdate) -> dict[str, Any] | None:
+    def update(self, kb_id: UUID, data: KBUpdate) -> KBRow | None:
         row = store.kbs.get(kb_id)
         if row is None:
             return None
         payload = data.model_dump(exclude_unset=True)
-        row.update(payload)
+        cast("dict[str, Any]", row).update(payload)
         row["updated_at"] = store.now()
         return row
 

@@ -4,14 +4,15 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from tests.fakes import make_kb_row
 
 from kb_service.main import create_app
 from kb_service.repositories.base import store
+from kb_service.repositories.rows import DocRow, KBRow
 from kb_service.services.rag_service import RagService
 
 USER_ID = UUID("22222222-2222-4222-8222-222222222222")
@@ -20,10 +21,10 @@ USER_ID = UUID("22222222-2222-4222-8222-222222222222")
 class FakeDocRepo:
     """doc_repo 契约的内存 fake：list_by_kb 返回 (rows, total)。"""
 
-    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
+    def __init__(self, rows: list[DocRow] | None = None) -> None:
         self.rows = rows or []
 
-    def list_by_kb(self, kb_id: UUID, offset: int, limit: int) -> tuple[list[dict[str, Any]], int]:
+    def list_by_kb(self, kb_id: UUID, offset: int, limit: int) -> tuple[list[DocRow], int]:
         rows = [r for r in self.rows if r["kb_id"] == kb_id]
         return rows[offset : offset + limit], len(rows)
 
@@ -31,11 +32,11 @@ class FakeDocRepo:
 class FakeKBService:
     """kb_service 的最小替身：鉴权恒通过。"""
 
-    def get_or_403(self, kb_id: UUID, user_id: UUID) -> dict[str, Any]:
-        return {"id": kb_id}
+    def get_or_403(self, kb_id: UUID, user_id: UUID) -> KBRow:
+        return make_kb_row(kb_id, user_id)
 
 
-def _doc_row(kb_id: UUID, content: str) -> dict[str, Any]:
+def _doc_row(kb_id: UUID, content: str) -> DocRow:
     now = datetime.now(UTC)
     return {
         "id": uuid4(),
@@ -99,7 +100,7 @@ async def test_chat_sse_via_async_client(monkeypatch: pytest.MonkeyPatch) -> Non
 
     kb_id = uuid4()
     doc_id = uuid4()
-    now = datetime.now(UTC).isoformat()
+    now = datetime.now(UTC)
 
     # 按 KBOut / doc row 的字段造数据
     store.kbs[kb_id] = {

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
 from uuid import UUID, uuid4
+
+from kb_service.repositories.rows import DocRow, KBRow
 
 
 class InMemoryStore:
@@ -13,8 +14,8 @@ class InMemoryStore:
     """
 
     def __init__(self) -> None:
-        self.kbs: dict[UUID, dict[str, Any]] = {}
-        self.docs: dict[UUID, dict[str, Any]] = {}
+        self.kbs: dict[UUID, KBRow] = {}
+        self.docs: dict[UUID, DocRow] = {}
 
     def new_id(self) -> UUID:
         return uuid4()

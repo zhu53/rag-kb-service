@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from kb_service.core.exceptions import NotFoundError
 from kb_service.repositories.doc_repo import DocRepository
 from kb_service.repositories.kb_repo import KBRepository
 from kb_service.repositories.protocols import DocRepo, KBRepo
+from kb_service.repositories.rows import DocRow
 from kb_service.schemas.doc import DocCreate, DocOut
 from kb_service.schemas.kb import Page
 from kb_service.services.kb_service import KBService
@@ -57,7 +57,7 @@ class DocService:
         self.repo.delete(doc_id)
         self.kb_service.repo.incr_doc_count(row["kb_id"], -1)
 
-    def _parse_sync(self, row: dict[str, Any]) -> None:
+    def _parse_sync(self, row: DocRow) -> None:
         """同步解析占位实现。W12 TODO：换成 split_text + embedding + pgvector 写入。"""
         text: str = row["content"]
         chunks = split_text(text, chunk_size=400, overlap=50)

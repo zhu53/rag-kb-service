@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any, NamedTuple
+from typing import NamedTuple
 from uuid import UUID, uuid4
 
 import pytest
@@ -14,6 +14,7 @@ import pytest
 from kb_service.core.exceptions import ForbiddenError, NotFoundError
 from kb_service.repositories.doc_repo import DocRepository
 from kb_service.repositories.kb_repo import KBRepository
+from kb_service.repositories.rows import DocRow
 from kb_service.schemas.doc import DocCreate
 from kb_service.schemas.kb import KBCreate
 from kb_service.services.doc_service import DocService, split_text
@@ -31,7 +32,7 @@ class SpyDocRepo(DocRepository):
     def __init__(self) -> None:
         self.offsets: list[int] = []
 
-    def list_by_kb(self, kb_id: UUID, offset: int, limit: int) -> tuple[list[dict[str, Any]], int]:
+    def list_by_kb(self, kb_id: UUID, offset: int, limit: int) -> tuple[list[DocRow], int]:
         self.offsets.append(offset)
         return super().list_by_kb(kb_id, offset, limit)
 

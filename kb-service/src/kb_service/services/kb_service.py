@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from kb_service.core.exceptions import ForbiddenError, NotFoundError
 from kb_service.repositories.kb_repo import KBRepository
 from kb_service.repositories.protocols import KBRepo
+from kb_service.repositories.rows import KBRow
 from kb_service.schemas.kb import KBCreate, KBOut, KBUpdate, Page
 
 
@@ -23,7 +23,7 @@ class KBService:
         row = self.repo.create(owner_id, data)
         return KBOut.model_validate(row)
 
-    def get_or_403(self, kb_id: UUID, user_id: UUID) -> dict[str, Any]:
+    def get_or_403(self, kb_id: UUID, user_id: UUID) -> KBRow:
         row = self.repo.get(kb_id)
         if row is None:
             raise NotFoundError("知识库不存在")

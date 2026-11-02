@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from kb_service.repositories.base import store
+from kb_service.repositories.rows import DocRow
 from kb_service.schemas.doc import DocCreate
 
 
 class DocRepository:
     """文档数据访问层。W7 TODO：换成 SQLAlchemy。"""
 
-    def create(self, kb_id: UUID, data: DocCreate, *, status: str = "pending") -> dict[str, Any]:
+    def create(self, kb_id: UUID, data: DocCreate, *, status: str = "pending") -> DocRow:
         doc_id = store.new_id()
         now = store.now()
-        row: dict[str, Any] = {
+        row: DocRow = {
             "id": doc_id,
             "kb_id": kb_id,
             "title": data.title,
@@ -26,10 +26,10 @@ class DocRepository:
         store.docs[doc_id] = row
         return row
 
-    def get(self, doc_id: UUID) -> dict[str, Any] | None:
+    def get(self, doc_id: UUID) -> DocRow | None:
         return store.docs.get(doc_id)
 
-    def list_by_kb(self, kb_id: UUID, offset: int, limit: int) -> tuple[list[dict[str, Any]], int]:
+    def list_by_kb(self, kb_id: UUID, offset: int, limit: int) -> tuple[list[DocRow], int]:
         rows = [r for r in store.docs.values() if r["kb_id"] == kb_id]
         rows.sort(key=lambda r: r["created_at"], reverse=True)
         return rows[offset : offset + limit], len(rows)
