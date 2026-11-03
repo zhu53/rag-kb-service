@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import httpx
+from pydantic import BaseModel, ValidationError
+
+
+class _Message(BaseModel):
+    content: str
+
+
+class _Choice(BaseModel):
+    message: _Message
+
+
+class _ChatCompletion(BaseModel):
+    choices: list[_Choice]
+
+
+class LLMResponseError(RuntimeError):
+    """LLM 返回的结果不符合 OpenAI 兼容协议"""
 
 
 class LLMClient:
@@ -43,4 +58,11 @@ class LLMClient:
             # resp.json() 返回 Any：HTTP 响应体里是什么只有运行时才知道。
             # 这里 cast(str, ...) 是"我保证了 JSON 结构"的声明，代价是如果 API
             # 改结构这里不会有人替你挡——所以 W14 换成带 pydantic 模型校验的版本。
-            return cast(str, resp.json()["choices"][0]["message"]["content"])
+            data = resp.json()  # Any —— 边界在这里
+            try:
+                parsed = _ChatCompletion.model_validate(data)
+            except ValidationError as exc:
+                raise LLMResponseError("LLM 响应结构不符合预期") from exc
+            if not parsed.choices:
+                raise LLMResponseError("LLM 响应 choices 为空")
+            return parsed.choices[0].message.content

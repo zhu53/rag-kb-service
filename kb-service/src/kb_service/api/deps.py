@@ -34,8 +34,8 @@ async def get_current_user_id(
     if credentials is None:
         raise UnauthorizedError("缺少认证信息")
     # HTTPBearer 已校验 scheme 必须是 Bearer，这里只需处理 token 本身
-    payload = decode_access_token(credentials.credentials)
-    sub = payload.get("sub")
-    if not sub:
-        raise UnauthorizedError("凭证缺少 subject")
-    return UUID(str(sub))
+    claims = decode_access_token(credentials.credentials)
+    try:
+        return UUID(claims.sub)
+    except ValueError as exc:
+        raise UnauthorizedError("凭证 subject 不是合法用户") from exc

@@ -45,13 +45,13 @@ review_<序号>_<主题>.py
 
 ```powershell
 # Windows PowerShell（用 kb-service 的 venv，因为 respx/httpx 装在里面）
-cd C:\Users\acer-pc\WorkBuddy\2026-10-20-08-44-29\python-backend-roadmap
+cd F:\WorkBuddy\2026-10-20-08-44-29\python-backend-roadmap
 & .\kb-service\.venv\Scripts\python.exe reviews\review_11_typing.py
 ```
 
 ```bash
 # Git Bash / Linux / macOS（Windows 上的 venv 是 Scripts，真 Linux 是 bin）
-cd /c/Users/acer-pc/WorkBuddy/2026-10-20-08-44-29/python-backend-roadmap
+cd /f/WorkBuddy/2026-10-20-08-44-29/python-backend-roadmap
 ./kb-service/.venv/Scripts/python.exe reviews/review_11_typing.py
 ```
 
@@ -91,7 +91,7 @@ cd /c/Users/acer-pc/WorkBuddy/2026-10-20-08-44-29/python-backend-roadmap
 | 11 | `review_11_typing.py` | 文档视图装配：返回值 / 参数 / `cast` | W5-D1 | `review_08_typing` | **3/3** |
 | 12 | `review_12_ports.py` | 文档端口：变异写反 / `object` 返回值 / `isinstance` 假阳性 | W5-D2 | — | **4/4** |
 | 13 | `review_13_precise.py` | 文档索引：`total=False` 取值 / overload 漏分支 / `cast` 污染 Literal / `or` 吃空串 | W5-D3 | — | **2/4**（坑 2、3 中；坑 1 偏成 status 收窄；坑 4 位置对但机理错） |
-| 14 | `review_14_vendor.py` | 行情网关：`cast` 无校验 / `or` 吃 0 / `except Exception` 吞错 / `total=False` 取值 | W5-D4 | — | 待做 |
+| 14 | `review_14_vendor.py` | 行情网关：`cast` 无校验 / `or` 吃 0 / `except Exception` 吞错 / `total=False` 取值 | W5-D4 | — | **1/4**（只中坑 1；坑 2 抓成"load 没分页"这个功能缺失，未抓到 `page_size=0` 被 `if raw else` 吞掉） |
 
 > `04` 和 `08` 都叫 notes，但完全不同：04 考**分层**（存取与业务规则分离），08 考**测试替身**（fake repo 与交互断言）。
 

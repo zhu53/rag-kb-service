@@ -76,7 +76,7 @@ mypy_path = "src"
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-module = ["passlib.*", "jose.*"]
+module = ["jose.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
