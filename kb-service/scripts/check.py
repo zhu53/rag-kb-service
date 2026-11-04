@@ -39,6 +39,7 @@ def main() -> int:
             "ruff format --check",
             [sys.executable, "-m", "ruff", "format", "--check", *TARGETS, *REVIEWS],
         ),
+        ("mypy", [sys.executable, "-m", "mypy", *TARGETS]),
         (
             f"pytest + 覆盖率门禁 ({COV_FLOOR}%)",
             [

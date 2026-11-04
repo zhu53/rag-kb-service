@@ -54,6 +54,14 @@ jobs:
             echo "::error title=ruff format failed::${MSG}"
             exit 1
           }
+      - name: mypy
+        run: |
+          set -o pipefail
+          uv run python -m mypy src tests scripts conftest.py 2>&1 | tee /tmp/step.log || {
+            MSG=$(tail -30 /tmp/step.log | sed -e 's/\r$//' -e 's/%/%25/g' | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')
+            echo "::error title=mypy failed::${MSG}"
+            exit 1
+          }
 
       - name: pytest + coverage
         run: |
