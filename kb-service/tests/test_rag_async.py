@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from tests.fakes import make_kb_row
 
@@ -94,18 +95,20 @@ async def test_answer_stream_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
     assert chunks[-1] == "data: [DONE]\n\n"
 
 
-async def test_chat_sse_via_async_client(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_chat_sse_via_async_client(
+    app: FastAPI,
+    override_current_user_id: UUID,
+) -> None:
     """集成：先在 store 里种一个 kb + 一篇文档，再走真实路由。"""
-    app = create_app()
 
     kb_id = uuid4()
     doc_id = uuid4()
     now = datetime.now(UTC)
 
-    # 按 KBOut / doc row 的字段造数据
+    # 按 KBOut / doc row 的字段造数据；owner 必须是"当前登录用户"，否则路由里 get_or_403 会拒
     store.kbs[kb_id] = {
         "id": kb_id,
-        "owner_id": USER_ID,
+        "owner_id": override_current_user_id,
         "name": "测试库",
         "description": "",
         "doc_count": 1,
@@ -123,15 +126,6 @@ async def test_chat_sse_via_async_client(monkeypatch: pytest.MonkeyPatch) -> Non
         "created_at": now,
         "updated_at": now,
     }
-
-    # 集成层更推荐用 dependency_overrides 覆盖认证依赖，
-    # 而不是 monkeypatch 业务对象，因为这样走完整路由栈。
-    from kb_service.api.deps import get_current_user_id  # 按你项目的真实路径替换
-
-    async def _fake_user_id() -> UUID:
-        return USER_ID
-
-    app.dependency_overrides[get_current_user_id] = _fake_user_id
 
     try:
         transport = ASGITransport(app=app)
@@ -152,7 +146,6 @@ async def test_chat_sse_via_async_client(monkeypatch: pytest.MonkeyPatch) -> Non
         assert any("data: " in line for line in lines)
         assert lines[-2] == "data: [DONE]"
     finally:
-        app.dependency_overrides.clear()
         store.kbs.pop(kb_id, None)
         store.docs.pop(doc_id, None)
 
