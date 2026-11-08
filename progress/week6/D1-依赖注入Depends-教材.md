@@ -6,6 +6,88 @@
 
 ---
 
+## 零、先看主线：九个知识点在一条线上
+
+> 这一节是全篇的地图。先扫一眼（3 分钟），不必看懂细节；每读完一节回来对一次位置。
+
+D1 的全部内容可以压成一句话：
+
+> **注册时建树，请求时走树。**
+
+九个知识点只是这条线上的不同时刻：
+
+```
+【注册时】服务器启动，@app.get(...) 执行的那一瞬间
+   │  §二  §3.1   扫描函数签名，看到 Depends(...) → 把它变成一个 Dependant 节点
+   │               （节点之间用"我需要谁"的箭头连起来，§三 的树就是这么来的）
+   ↓
+【请求时】每个请求进来，同一个节点被"执行"一次
+   │  ① 新建一个空的 dependency_cache            §4.1  每个请求一个，用完就丢
+   │  ② 从根节点开始，深度优先往下递归            §3.2
+   │  ③ 每到一个节点先解它的子树，再查缓存（三元组 key） §四   命中只省"自己这次调用"
+   │  ④ 没命中，再查 overrides 有没有替身         §六   有就按替身重建子树
+   │  ⑤ 真调用：普通函数直接返回                 §五
+   │     generator 函数跑到 yield 停住，值给下游   §五
+   │  ⑥ 调 handler（你的路由函数）
+   │  ⑦ handler 结束，逆序跑所有 yield 的 teardown §五   跑在响应前还是后 → scope
+   ↓
+【请求结束】缓存字典随请求一起丢弃                §4.1
+```
+
+### 串不起来的根源：这条线的两侧
+
+`Depends(get_current_user_id)` 这一行代码，**被读两次**：
+
+| | 什么时候 | 谁在动它 | 变成什么 |
+|---|---|---|---|
+| 第一次 | 注册时（启动那一下） | `get_dependant` 扫签名 | 一个**数据结构**（节点 + 箭头） |
+| 第二次 | 每个请求进来时 | `solve_dependencies` 走树 | 一次**函数调用** |
+
+把这两次混在一起，就永远串不动：你以为 `Depends(...)` 是"调用"，其实它在注册时只是"声明"；你以为依赖树是"运行时才建"，其实它在启动时就建好了。
+
+**这条分界线就是 D1 的骨架。** §二 讲声明，§3.2 之后全是执行，§四/§五/§六 分别是执行过程里的三个机制（缓存 / 善后 / 替换）。
+
+### 用一段话把九个点串起来
+
+```python
+@app.get("/kbs")
+def list_kbs(user_id: UUID = Depends(get_current_user_id)):
+```
+
+**注册时**，这行变成一棵树：`list_kbs` 是根，`get_current_user_id` 是它的子；**但 `get_current_user_id` 自己还有参数 `credentials: Depends(_bearer_scheme)`，所以它也有子**——`get_dependant` 是递归的，一路展开到没有 `Depends` 为止（§二、§3.1、§三）：
+
+```text
+list_kbs                                    ← 根（路由函数）
+└── user_id: Depends(get_current_user_id)
+        └── credentials: Depends(_bearer_scheme)   ← 叶子（HTTPBearer 实例，可调用）
+```
+
+> **这里原来写成"两个节点"是错的**（2026-11-08 被读者抓出来）。规则只有一条：**一个节点 = 一个 `Depends(...)`**，被依赖的函数自己还有 `Depends` 参数，就再往下长一层。所以这条线的节点数是 3，不是 2。`page` / `size` 是根节点自己的 query 参数，不算节点（0.150 实测见 §3.3 第二步）。
+> 记法：**从任意一个节点往下看，它自己就是一棵子树的根**——"树"是相对的，展开到最深处才是全局那棵树。
+
+**请求进来时**，框架先建一个空缓存（§4.1）；**从叶子开始**——先走到 `_bearer_scheme` 这个节点：查缓存，空的（§四）；查 overrides，没有替身（§六）；真调它，从 `Authorization` 头里取出 `HTTPAuthorizationCredentials`（§五），返回值写进缓存（§四）。**再往上一层**到 `get_current_user_id`：同样查缓存、查 overrides，然后真调它——它拿到上一步的 `credentials`，解 JWT 得到 `user_id`，写进缓存（§五、§四）。**最后到根**，调 `list_kbs(user_id=...)`（§3.3）。
+
+> 顺序要点：**叶子先跑，父节点后跑**（后序遍历）。所以"`get_current_user_id` 里能拿到 `credentials`"不是因为它去要了，而是因为框架**先把这个子的返回值算好、再当实参传进去**。这就是为什么缓存 key 里要带参数配置（§四）——同一个函数、不同参数，算出来的值不一样。
+>
+> 想亲手验证这棵树（不用起服务器，5 秒出结果）：在 `kb-service/` 下跑 `../progress/week6/D1-探针-依赖树.py`，输出会是 `list_kbs → get_current_user_id → HTTPBearer` 三层缩进，且 `query=['page','size']` 显示在 `list_kbs` 自己的参数槽里。
+
+**如果它是 `yield` 依赖**（比如开数据库 session），那么 `list_kbs` 结束后才跑 `yield` 后面的 teardown，而 teardown 跑在响应发出前还是后，由 `scope` 决定（§五）。
+
+**测试时**，你往 `overrides` 里塞一个替身（§六），树在请求时就被换掉——真实函数一次都不跑，所以测试不会碰数据库。
+
+**请求结束**，缓存字典丢掉，下一个请求重新建（§4.1）。这就是为什么"全局缓存会串用户"——缓存本身是请求级的，安全的；你要是自己把它做成全局的，就等于把这条线的终点搬走了。
+
+### 每节的"位置"自查
+
+读完一节，回来问一句：**这一节讲的是线上哪个时刻？**
+
+- 答"注册时" → 它在讲声明
+- 答"请求时的第 ③ 步" → 它在讲缓存
+- 答"第 ⑦ 步" → 它在讲 teardown
+- **答不出来 → 那一节还没读进去**，回读那一节的开头两段
+
+---
+
 ## 一、痛点场景：没有依赖注入时，你在写什么
 
 先看一个**没有 DI**的鉴权写法（你 W3 之前的状态）：
@@ -184,19 +266,19 @@ async def get_current_user_id(
         raise UnauthorizedError("凭证 subject 不是合法用户") from exc
 ```
 
-#### 第二步：注册期建的树（每个节点对应上面一个"参数"）
+#### 第二步：注册期建的树（节点只由 `Depends` 产生）
 
-```
-list_kbs                      ← 根：你的路由函数
-├── page:   Query(default=1)          ← 从 query string 取，不是依赖函数
-├── size:   Query(default=20)
-└── user_id: Depends(get_current_user_id)     ← 依赖节点
-        └── credentials: Depends(_bearer_scheme)   ← HTTPBearer 实例，也是依赖节点
+```text
+list_kbs                          ← 根：路由函数
+│   自己身上挂着两个 query 参数：page=1、size=20（不是节点，是根节点自己的参数槽）
+└── user_id: Depends(get_current_user_id)      ← 第 2 个节点
+        └── credentials: Depends(_bearer_scheme)   ← 第 3 个节点（叶子，HTTPBearer 实例）
 ```
 
 **看图的三条规则**（这是你之前卡住的地方，说透）：
 
-1. **一个节点 = 路由函数的一个参数**。`page` 也是节点，只是它是"从请求取值的节点"，不需要调用任何函数。
+1. **一个节点 = 一个 `Depends(...)`**；节点数 = 依赖链上 `Depends` 的个数 + 1（根）。`page` / `size` 这种 `Query(...)` 参数只是挂在根节点身上的参数槽，不单独成节点。
+   > 这一条按 **FastAPI 0.150 实测**（本机 `.venv` 里就是 0.150.0）：`get_dependant(...).query_params == [page, size]`，而 `.dependencies` 里只有 `get_current_user_id`。老版本（0.9x）里参数确实会各自变成一个子 `Dependant`，网上很多画着"每个参数一个节点"的图是那个年代的——两套说法不冲突，只是结构变了。
 2. **箭头方向 = "我需要谁"**。`list_kbs` 需要 `get_current_user_id` 的返回值；`get_current_user_id` 需要 `_bearer_scheme` 的返回值。
 3. **`_bearer_scheme` 是对象不是函数，为什么还能当节点？** 见本节最后的"事实 1"——因为它**可调用**。
 
@@ -323,17 +405,106 @@ async def delete_kb(kb_id: UUID, admin_id: UUID = Depends(require_admin)) -> Non
 
 ### 4.1 缓存的范围：一次请求，不是全局
 
+#### 4.1.0 先补前置：`dependency.call` 到底是什么
+
+上一节末尾那张表出现了 `dependant.call`，但一直没定义它。补上——**不补这一段，缓存 key 和"参数怎么传进去"两件事都没法讲**（读者反馈：卡在这里）。
+
+**一句话**：`call` 就是你在 `Depends(...)` 括号里塞的那个东西**本身**，注册时被原样存到节点上；请求时框架拿它当函数调，参数是 `call(**values)`。
+
+```python
+Depends(get_current_user_id)     # 节点的 call = 函数对象 get_current_user_id
+Depends(_bearer_scheme)          # 节点的 call = HTTPBearer 实例（它实现了 __call__）
+Depends(KBService)               # 节点的 call = 类本身（调它 = 实例化）
+```
+
+源码锚点（本机 `.venv`）：
+
+| 位置 | 代码 | 含义 |
+|---|---|---|
+| `dependencies/utils.py:271-282` | `def get_dependant(*, path, call, ...)` → `Dependant(call=call, ...)` | 注册期把 `call` **原样**存进节点，不做任何包装 |
+| `dependencies/utils.py:632-638` | `get_dependant(path=..., call=call, ...)` | `include_router` / override 重建节点时，同样只是把 call 传进去 |
+| `dependencies/utils.py:674` | `solved = await call(**solved_result.values)` | async 函数：**await call(kwargs)** |
+| `dependencies/utils.py:676` | `solved = await run_in_threadpool(call, **solved_result.values)` | 同步函数：丢线程池调，**还是 call(kwargs)** |
+| `dependencies/utils.py:662-672` | `_is_gen_callable(...)` → `_solve_generator(...)` | `yield` 依赖：不直接调，交给 ExitStack 管生命周期（§五） |
+
+**所以 `call` 的三种形态，只是"执行方式"不同，不是"节点种类"不同**：
+
+```text
+普通函数 / lambdas / 类  →  直接调（同步的走线程池）
+async def                →  await 调
+带 yield 的（含 async）   →  包进 _solve_generator，调一次拿到 yield 值，剩下交给 teardown
+实现 __call__ 的实例      →  和普通函数一样调（这就是 _bearer_scheme 能当节点的原因）
+```
+
+> **为什么它能当缓存 key 的第①项**：函数对象在进程内存里唯一、可哈希、跨请求不变——天生就是"身份"。
+> `dependencies/models.py:70-78` 甚至专门写了 `_CallIdentity`：`__hash__` 返回 `id(self.call)`，`__eq__` 用 `is` 比较。也就是**比的是"是不是同一个对象"，不是"名字像不像"**。
+> 所以两条路由都写 `Depends(get_current_user_id)`，引用的是**同一个函数对象** → key 相同 → 一次请求里只跑一次；你自己写两个同名但独立的函数（或 `lambda`），就是两个 key，不会被缓存合并。
+
+#### 4.1.0b 参数到底怎么处理的：三段路
+
+这是"看不懂 `call`"背后真正的疑问——**函数的形参，是从哪一步变成值的？** 全程三步，一步都不少：
+
+```text
+① 注册时：扫签名，给每个形参分类，挂到节点身上
+        page: int = Query(1)      → 节点.query_params   （ParamDetail）
+        size: int = Query(20)     → 节点.query_params
+        kb_id: UUID（在路径里）    → 节点.path_params
+        body: KBCreate            → 节点.body_params     （Pydantic 模型）
+        user_id = Depends(...)    → 节点.dependencies 里多一个子节点（call=那个函数）
+        x: str = Header(...)      → 节点.header_params
+        c: str = Cookie(...)      → 节点.cookie_params
+
+② 请求时：从 request 取值 + 类型转换 + 校验，塞进一个 dict
+        request_params_to_args(节点.query_params, request.query_params)   # utils.py:684-686
+        → {"page": 1, "size": 20}      转换失败 → 进 errors → 422，本次 call 不执行
+        子依赖的返回值也塞进同一个 dict：values[子节点.name] = solved     # utils.py:677-678
+        → {"page": 1, "size": 20, "user_id": UUID("...")}   键 = 形参名
+
+③ 调用：call(**values)                                                # utils.py:674 / 676
+        = list_kbs(page=1, size=20, user_id=UUID("..."))
+```
+
+看懂这三点，几个常见困惑一起解开：
+
+- **"为什么参数名不能乱改？"** 因为 dict 的键就是形参名，`values["page"]` 是靠签名里的名字对上的（改名后两边都对不上 → 参数拿不到值 / 传参报错）。
+- **"为什么 `Depends` 的返回值能自动进形参？"** 因为 `values[sub_dependant.name] = solved`——`name` 就是那个 `Depends` 所在的参数名（这里 `name="user_id"`）。
+- **"为什么依赖里有 `Query` 参数也能自动填？"** 依赖节点的 `query_params` 同样在它自己那一层被 `request_params_to_args` 解析，和根节点用同一套逻辑——**节点不分主次，每个节点都自己取值、自己校验**。
+- **"422 是谁报的、什么时候报？"** `errors` 非空时 `solve_dependencies` 直接 `continue`（`utils.py:653-655`），**这个节点的 call 根本不会被调**，错误交给上层汇总成 422。所以 422 是"参数还没进函数"时就发生的。
+
+一段可跑的验证（放到探针文件里跑）：
+
+```python
+from fastapi.dependencies.utils import get_dependant
+from kb_service.api.v1.knowledge_bases import list_kbs
+
+d = get_dependant(path="/kbs", call=list_kbs)
+print("call =", d.call.__name__)                                  # list_kbs
+print("query_params =", [p.name for p in d.query_params])         # ['page', 'size']
+print("dependencies =", [c.call.__name__ for c in d.dependencies])# ['get_current_user_id']
+print("子节点的 call =", d.dependencies[0].call.__name__)          # get_current_user_id
+print("孙节点的 call =", type(d.dependencies[0].dependencies[0].call).__name__)  # HTTPBearer
+```
+
+#### 4.1.1 回到缓存：一次请求，不是全局
+
 实测（§二 已跑）菱形依赖中 `dep_a` 只被调用一次。为什么？
 
 源码位置（本机路径）：
-`kb-service/.venv/Lib/site-packages/fastapi/dependencies/utils.py`，`solve_dependencies` 的缓存核心在 **660–680 行**：
+`kb-service/.venv/Lib/site-packages/fastapi/dependencies/utils.py`，`solve_dependencies` 的缓存核心在 **640–680 行**：
 
 ```python
-# utils.py:660-661（节选，源码就是这两行）
+# utils.py:640-651 —— 先把子树解完（拿到子依赖的返回值当实参）
+solved_result = await solve_dependencies(
+    request=request,
+    dependant=use_sub_dependant,      # ← 递归：这棵子树的子依赖在这一步全跑完
+    ...
+)
+
+# utils.py:660-661 —— 子树解完，才查缓存（命中就省掉"自己这次调用"）
 if sub_dependant.use_cache and sub_dependant_cache_key in dependency_cache:
     solved = dependency_cache[sub_dependant_cache_key]
 
-# utils.py:679-680
+# utils.py:679-680 —— 没命中才写
 if sub_dependant_cache_key not in dependency_cache:
     dependency_cache[sub_dependant_cache_key] = solved
 ```
@@ -342,9 +513,19 @@ if sub_dependant_cache_key not in dependency_cache:
 
 | 行号 | 做什么 | 为什么这么设计 |
 |---|---|---|
-| 660 | 解析子依赖前，先查 `dependency_cache` 里有没有 | 避免同一个依赖（如"取当前用户"）在一次请求里被重复执行——鉴权、查库都可能有副作用 |
+| 656-659 | 算这一层的 cache key | key 只由"身份"决定，不含实参（见下） |
+| 640-651 | **先把这棵子树解完**（递归 `solve_dependencies`） | 子依赖要先生成实参 |
+| 660-661 | 子树解完，才查 `dependency_cache` 里有没有这个 key | 避免同一依赖（如"取当前用户"）在一次请求里重复调用——鉴权、查库都可能有副作用 |
 | 661 | 命中就直接用缓存的值 | 值相同 + 副作用不重复，语义和性能双赢 |
 | 679-680 | 没命中才真正调用，然后写进缓存 | 缓存的是**调用结果**，key 是依赖的"**身份**"——注意"身份"具体是什么，见下面这段 |
+
+> **⚠️ 顺序很反直觉，我第一版写错过**：缓存检查在**递归之后**（640-651 在 656-661 之前），所以"命中缓存"省掉的只是**这个节点自己这次调用**，**不是整棵子树**——走到这一层时，它的子依赖已经执行完了。
+> 实测（`parent` 依赖的 `leaf` 设 `use_cache=False`，`parent` 被两处 `Depends` 引用）：
+> ```text
+> calls: ['leaf', 'parent', 'leaf']
+> ```
+> `parent` 只跑一次（第二处命中缓存），但 `leaf` 跑了两次——因为第二处 `parent` 的子树在查缓存之前就被重新解了一遍。
+> 所以"缓存让整个子树不执行"是错的；正确说法是"**缓存只让这一个节点不执行；子树是否执行，取决于子树自己的缓存**"。
 
 **0.150.0 里 cache key 到底是哪三项**（源码 `dependencies/models.py:92-96`，`_get_cache_key`）：
 
@@ -365,11 +546,38 @@ return (
 
 ### 4.2 关掉缓存：`use_cache=False`
 
-什么时候一个请求里**需要**同一依赖被调用两次？举两个真实场景：
+#### 先回答那个具体问题：参数值不同，key 一样吗？
 
-- 一个接口同时要"当前用户的完整资料"和"目标用户的公开资料"——都靠 `get_user(id)` 取，两个不同的 id **必须**查两次。
-  ⚠️ 光是参数不同**不够**：cache key 不含实参（§4.1），不显式关缓存的话，第二处会直接复用第一处的值 → **你拿到的"目标用户"其实是自己**。这是一个真实的越权漏洞形态，不是性能问题。
-- 某依赖内部读文件/发请求，每次调用点的语义就是"重新拿一次"
+**一样。** key 是 `(call 对象, scopes, scope)`，**实参完全不参与**。所以下面这两处的 key 完全相同：
+
+```python
+a = Depends(get_user)      # 解出来 uid="7"
+b = Depends(get_user)      # 解出来 uid="7"（因为读的是同一个 request）
+# key 都 = (get_user, (), '') → 第二次直接拿缓存
+```
+
+实测（`/same?uid=7`）：
+
+```text
+{'a': {'uid': '7'}, 'b': {'uid': '7'}}     calls: ['get_user(7)']   ← 只执行一次
+```
+
+**但再往下追问一步，这个"缺陷"其实碰不到**——因为同一请求内，同一个 `call` 的两处挂载点，参数都是从**同一个 request** 里解出来的，值本来就不可能不同（query/path/body 只有一份）。想真的传不同的值，只有两条路：
+
+| 写法 | 会发生什么（实测） |
+|---|---|
+| `Depends(partial(get_user, uid="1"))` 和 `Depends(partial(get_user, uid="2"))` | **各跑一次**，`{'a': {'uid':'1'}, 'b': {'uid':'2'}}`——因为 `partial` 造出了**两个不同的 call 对象**，key 第一项就不同了 |
+| `Depends(get_user)` + 想让第二处换个 id | 做不到。`Depends(dep, uid="1")` 这种传参写法会直接 `TypeError`：`Depends` 不接收实参 |
+
+**所以"key 不含实参"不会导致越权**——设计前提是"同一请求内同 callable 的实参恒定"，这个前提在 FastAPI 里成立。我上一版把它写成"越权漏洞"是错的（2026-11-08 实测推翻），真正的越权风险是另一件事：**把 `dependency_cache` 手动做成全局的**——那样 A 用户的值会被 B 用户的请求命中（`get_current_user_id` 无参，key 永远一样），见 §4.3 末尾。
+
+#### 那 `use_cache=False` 到底什么时候真要？
+
+只剩一种语义：**同一依赖在这个请求里就是要重新执行一次**。
+
+- 依赖里取的是"这一刻"的状态：nonce、时间戳、一次性 token、`secrets.token_urlsafe()`
+- 每次调用点都需要独立的资源：第二条数据库连接、第二份事务、重新读一次文件
+- 你要一个"故意不复用"的探针/埋点，用来验证缓存真的在生效（今天的实测就是这么写的）
 
 写法与实测：
 
@@ -389,6 +597,8 @@ def nocache(
 调用顺序: ['fresh', 'fresh']     ← 两次调用
 ```
 
+**一句话记法**：`use_cache` 回答的是"要不要**再执行一次**"，不是"要不要换个参数执行"——换参数靠换 call 对象（`partial`/工厂函数）。
+
 ### 4.3 一个高频误用：把"共享状态"放错了地方
 
 看这个错误想法："我想在一个请求里让多个依赖共享一个计数器/一条数据库连接，用模块级变量行不行？"
@@ -407,6 +617,21 @@ async def get_doc_repo(session = Depends(get_db_session)):
 ```
 
 **`get_db_session` 在一个请求里只执行一次**（缓存），两个 repo 拿到同一个 session——这就是 FastAPI 版的"请求作用域容器"。W7 数据库周会把这个模式落地成真代码。
+
+**顺便把真正的越权风险说清**（§4.2 里我误记成"参数不同会串"，那是错的；危险在这里）：
+
+```python
+# 千万别这么干：把请求级缓存提升成全局
+GLOBAL_CACHE = {}          # ← 跨请求存活
+
+def get_current_user_id(credentials=Depends(_bearer_scheme)):
+    key = (get_current_user_id, (), "")        # 无参依赖 → key 永远一样
+    if key in GLOBAL_CACHE:
+        return GLOBAL_CACHE[key]                # ← B 用户拿到 A 的 user_id
+    ...
+```
+
+`get_current_user_id` 没有参数，key 恒定，全局缓存下**第一个请求的结果会永久复用**——A 登录后 B 请求进来，`user_id` 还是 A 的，用户私有知识库直接串到别人列表里。这才是能写进故障报告的场面。缓存范围必须是"一个请求"，这个设计前提一点都不能动。
 
 ---
 
