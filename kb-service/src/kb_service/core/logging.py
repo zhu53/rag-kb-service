@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 import time
 import uuid
@@ -44,6 +45,16 @@ _RESERVED = {
 }
 
 
+_TRACE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")  # 字母/数字/._-，限 64 字符
+
+
+def _sanitize_trace_id(raw: str | None) -> str:
+    """清洗 trace_id：格式不对或超长则丢弃，自生成一个。"""
+    if raw and _TRACE_ID_RE.match(raw):
+        return raw
+    return uuid.uuid4().hex  # 32 字符，纯小写十六进制
+
+
 class JsonFormatter(logging.Formatter):
     """把日志格式化成一行 JSON，方便被 Loki/ES 采集和按字段检索。"""
 
@@ -81,10 +92,17 @@ def setup_logging() -> None:
 
 
 class TraceMiddleware(BaseHTTPMiddleware):
-    """给每个请求分配 trace_id，并写回响应头；同时记录耗时。"""
+    """给每个请求分配 trace_id，并写回响应头；同时记录耗时。
+
+    只有请求成功，X-Trace-Id 和 X-Duration-Ms 才都会写回响应头，
+    客户端拿到任何响应都能对上 trace_id。
+
+    异常路径 raise 之后，500 由最外层 ServerErrorMiddleware 生成，
+    中间件手里没有 response 对象，这两个头写不进去。
+    """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        trace_id = request.headers.get("X-Trace-Id") or uuid.uuid4().hex[:16]
+        trace_id = _sanitize_trace_id(request.headers.get("X-Trace-Id"))
         token = trace_id_ctx.set(trace_id)
         logger = logging.getLogger("kb_service.access")
         start = time.perf_counter()
@@ -100,18 +118,19 @@ class TraceMiddleware(BaseHTTPMiddleware):
                 },
             )
             raise
+        else:
+            duration_ms = round((time.perf_counter() - start) * 1000, 2)
+            logger.info(
+                "request",
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status": response.status_code,
+                    "duration_ms": duration_ms,
+                },
+            )
+            response.headers["X-Trace-Id"] = trace_id
+            response.headers["X-Duration-Ms"] = str(duration_ms)
+            return response
         finally:
             trace_id_ctx.reset(token)
-
-        duration_ms = round((time.perf_counter() - start) * 1000, 2)
-        logger.info(
-            "request",
-            extra={
-                "method": request.method,
-                "path": request.url.path,
-                "status": response.status_code,
-                "duration_ms": duration_ms,
-            },
-        )
-        response.headers["X-Trace-Id"] = trace_id
-        return response

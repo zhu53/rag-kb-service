@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -38,7 +39,7 @@ def create_app() -> FastAPI:
             content={
                 "code": "VALIDATION_ERROR",
                 "message": "参数校验失败",
-                "detail": exc.errors(),
+                "detail": jsonable_encoder(exc.errors()),
             },
         )
 
