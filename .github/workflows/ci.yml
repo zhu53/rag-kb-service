@@ -16,15 +16,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 钉版本而不是用 latest：latest 是随机变量，CI 行为会自己漂。
-      # 0.13.2 = 本地开发用的同一个版本，两边一致才好对日志。
-      # 2026-11-09 教训：latest(0.13.7) 下载时 GitHub 网关连甩两个 504，
-      # 失败点在装工具这一步，项目代码一行都没跑——5xx 是对方的问题，先重跑。
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      # 从 PyPI 装 uv，而不是 setup-uv 从 GitHub Releases 下 tar.gz。
+      # 两次教训（2026-11-09）：
+      #   1) latest(0.13.7) 下载时 GitHub 网关连甩 504，失败在装工具这步，项目代码一行没跑；
+      #   2) 钉成 0.13.2 后同一个 step 又失败（3m45s，重试耗尽）——说明不是版本问题，
+      #      是 "github.com/.../releases/download" 这条通路本身在 runner 上不稳定。
+      # 关键理由：uv sync 本来就要访问 pypi.org，多一条依赖 GitHub Releases 的通路毫无必要。
+      # 只留一条通路 = 少一个会独立挂掉的外部依赖。
+      - name: Install uv (from PyPI)
+        run: |
+          # ubuntu-latest 的系统 python 带 PEP 668 保护（externally-managed-environment），
+          # 直接 pip install 会被拒；建个临时 venv 装，再把 bin 塞进 GITHUB_PATH 给后续 step 用。
+          python3 -m venv "$RUNNER_TEMP/uv-venv"
+          "$RUNNER_TEMP/uv-venv/bin/python" -m pip install --quiet --retries 5 --timeout 60 "uv==0.13.2"
+          echo "$RUNNER_TEMP/uv-venv/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/uv-venv/bin/uv" --version
+
+      # setup-uv 的 enable-cache 就是这个缓存的封装，换成显式 actions/cache：
+      # key 挂 uv.lock 的哈希，lock 不变就复用整个 wheel 缓存。
+      - name: Cache uv
+        uses: actions/cache@v4
         with:
-          version: "0.13.2"
-          enable-cache: true
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('kb-service/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
 
       - name: Sync dependencies
         run: uv sync --dev
