@@ -16,8 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 钉版本而不是用 latest：latest 是随机变量，CI 行为会自己漂。
+      # 0.13.2 = 本地开发用的同一个版本，两边一致才好对日志。
+      # 2026-11-09 教训：latest(0.13.7) 下载时 GitHub 网关连甩两个 504，
+      # 失败点在装工具这一步，项目代码一行都没跑——5xx 是对方的问题，先重跑。
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.2"
+          enable-cache: true
 
       - name: Sync dependencies
         run: uv sync --dev
