@@ -2,9 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+
+from kb_service.schemas.common import not_blank
+
+DocTitle = Annotated[str, Field(min_length=1, max_length=200), AfterValidator(not_blank)]
+DocContent = Annotated[str, Field(min_length=1, max_length=20000), AfterValidator(not_blank)]
 
 
 class DocStatus(StrEnum):
@@ -15,8 +21,8 @@ class DocStatus(StrEnum):
 
 
 class DocCreate(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
-    content: str = Field(min_length=1)
+    title: DocTitle
+    content: DocContent
 
 
 class DocOut(BaseModel):
