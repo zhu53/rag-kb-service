@@ -5,6 +5,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from kb_service.api.v1 import health
 from kb_service.api.v1.router import api_router
 from kb_service.core.config import get_settings
 from kb_service.core.exceptions import AppError
@@ -48,7 +49,8 @@ def create_app() -> FastAPI:
             ).model_dump(),
         )
 
-    app.include_router(api_router, prefix="/api/v1")
+    app.include_router(health.router, tags=["health"])
+    app.include_router(api_router)
     return app
 
 

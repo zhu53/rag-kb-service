@@ -25,6 +25,6 @@ async def async_client() -> AsyncIterator[AsyncClient]:
 
 
 async def test_health_async(async_client: AsyncClient) -> None:
-    resp = await async_client.get("/api/v1/health")
+    resp = await async_client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"

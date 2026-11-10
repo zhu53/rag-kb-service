@@ -4,15 +4,16 @@ from fastapi.testclient import TestClient
 
 
 def test_health(client: TestClient) -> None:
-    r = client.get("/api/v1/health")
+    r = client.get("/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
     # assert r.json() == {"status": "healthy"}
+    assert "env" not in r.json()
     assert "X-Trace-Id" in r.headers
 
 
 def test_trace_id_passthrough(client: TestClient) -> None:
-    r = client.get("/api/v1/health", headers={"X-Trace-Id": "abc123"})
+    r = client.get("/health", headers={"X-Trace-Id": "abc123"})
     assert r.headers["X-Trace-Id"] == "abc123"
 
 
