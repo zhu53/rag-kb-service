@@ -20,4 +20,4 @@ def test_requires_auth(client: TestClient) -> None:
     client.headers.pop("Authorization", None)
     r = client.get("/api/v1/kbs")
     assert r.status_code == 401
-    assert r.json()["code"] == "UNAUTHORIZED"
+    assert r.json()["code"] == 40100

@@ -7,7 +7,8 @@ def test_kb_crud_flow(client: TestClient) -> None:
     # create
     r = client.post("/api/v1/kbs", json={"name": "考研资料", "description": "重邮复试"})
     assert r.status_code == 201, r.text
-    kb = r.json()
+    kb = r.json()["data"]
+    assert r.json()["code"] == 0
     assert kb["name"] == "考研资料"
     assert kb["doc_count"] == 0
     kb_id = kb["id"]
@@ -28,17 +29,17 @@ def test_kb_crud_flow(client: TestClient) -> None:
 
     r = client.get(f"/api/v1/kbs/{kb_id}")
     assert r.status_code == 404
-    assert r.json()["code"] == "NOT_FOUND"
+    assert r.json()["code"] == 40400
 
 
 def test_create_kb_validation_error(client: TestClient) -> None:
     r = client.post("/api/v1/kbs", json={"name": ""})
     assert r.status_code == 422
-    assert r.json()["code"] == "VALIDATION_ERROR"
+    assert r.json()["code"] == 42200
 
 
 def test_document_upload_and_chunk(client: TestClient) -> None:
-    kb_id = client.post("/api/v1/kbs", json={"name": "kb"}).json()["id"]
+    kb_id = client.post("/api/v1/kbs", json={"name": "kb"}).json()["data"]["id"]
     content = "人工智能" * 500
 
     r = client.post(
@@ -50,12 +51,12 @@ def test_document_upload_and_chunk(client: TestClient) -> None:
     assert doc["status"] == "ready"
     assert doc["chunk_count"] > 1
 
-    # 知识库的 doc_count 应当同步 +1
-    assert client.get(f"/api/v1/kbs/{kb_id}").json()["doc_count"] == 1
+    # 知识库的 doc_count 应当同步 +1（get_kb 响应已套 ApiResponse 壳）
+    assert client.get(f"/api/v1/kbs/{kb_id}").json()["data"]["doc_count"] == 1
 
 
 def test_chat_returns_sources(client: TestClient) -> None:
-    kb_id = client.post("/api/v1/kbs", json={"name": "kb"}).json()["id"]
+    kb_id = client.post("/api/v1/kbs", json={"name": "kb"}).json()["data"]["id"]
     client.post(
         f"/api/v1/kbs/{kb_id}/documents",
         json={"title": "a.md", "content": "重庆邮电大学人工智能专业复试经验"},
@@ -70,7 +71,7 @@ def test_chat_returns_sources(client: TestClient) -> None:
 
 
 def test_chat_stream_sse(client: TestClient) -> None:
-    kb_id = client.post("/api/v1/kbs", json={"name": "kb"}).json()["id"]
+    kb_id = client.post("/api/v1/kbs", json={"name": "kb"}).json()["data"]["id"]
     client.post(
         f"/api/v1/kbs/{kb_id}/documents",
         json={"title": "a.md", "content": "后端工程能力需要持续练习"},

@@ -151,7 +151,7 @@ async def test_chat_sse_via_async_client(
 
 
 async def test_chat_requires_auth(async_client: AsyncClient) -> None:
-    # 不带 Authorization 头打 /api/v1/chat，断言 401 + code == "UNAUTHORIZED"
+    # 不带 Authorization 头打 /api/v1/chat，断言 401 + code == 40100
     response = await async_client.post(
         "/api/v1/chat",
         json={
@@ -162,4 +162,4 @@ async def test_chat_requires_auth(async_client: AsyncClient) -> None:
 
     assert response.status_code == 401
     body = response.json()
-    assert body.get("code") == "UNAUTHORIZED"
+    assert body.get("code") == 40100

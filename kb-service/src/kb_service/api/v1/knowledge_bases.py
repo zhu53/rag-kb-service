@@ -5,18 +5,25 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 
 from kb_service.api.deps import get_current_user_id
+from kb_service.schemas.common import ApiResponse
 from kb_service.schemas.kb import KBCreate, KBOut, KBUpdate, Page
 from kb_service.services.kb_service import KBService
 
 router = APIRouter()
 
 
-@router.post("", status_code=status.HTTP_201_CREATED, summary="创建知识库")
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    summary="创建知识库",
+    response_model=ApiResponse[KBOut],
+)
 async def create_kb(
     body: KBCreate,
     user_id: UUID = Depends(get_current_user_id),
-) -> KBOut:
-    return KBService().create(user_id, body)
+) -> ApiResponse[KBOut]:
+    kb = KBService().create(user_id, body)
+    return ApiResponse[KBOut](data=kb)
 
 
 @router.get("", summary="分页查询我的知识库")
@@ -33,9 +40,13 @@ async def count_kbs(user_id: UUID = Depends(get_current_user_id)) -> dict[str, i
     return {"count": KBService().count_owned(user_id)}
 
 
-@router.get("/{kb_id}", summary="查询知识库详情")
-async def get_kb(kb_id: UUID, user_id: UUID = Depends(get_current_user_id)) -> KBOut:
-    return KBOut.model_validate(KBService().get_or_403(kb_id, user_id))
+@router.get("/{kb_id}", summary="查询知识库详情", response_model=ApiResponse[KBOut])
+async def get_kb(
+    kb_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+) -> ApiResponse[KBOut]:
+    kb = KBOut.model_validate(KBService().get_or_403(kb_id, user_id))
+    return ApiResponse[KBOut](data=kb)
 
 
 @router.patch("/{kb_id}", summary="更新知识库")
