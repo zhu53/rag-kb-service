@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, status
 
 from kb_service.api.deps import get_current_user_id
-from kb_service.schemas.common import ApiResponse
+from kb_service.schemas.common import ApiResponse, PageParams
 from kb_service.schemas.kb import KBCreate, KBOut, KBUpdate, Page
 from kb_service.services.kb_service import KBService
 
@@ -28,11 +29,10 @@ async def create_kb(
 
 @router.get("", summary="分页查询我的知识库")
 async def list_kbs(
-    page: int = Query(default=1, ge=1),
-    size: int = Query(default=20, ge=1, le=100),
+    params: Annotated[PageParams, Depends()],
     user_id: UUID = Depends(get_current_user_id),
 ) -> Page[KBOut]:
-    return KBService().list(user_id, page, size)
+    return KBService().list(user_id, params.page, params.size)
 
 
 @router.get("/stats/count", summary="我的知识库总数")

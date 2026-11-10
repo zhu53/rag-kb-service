@@ -111,3 +111,41 @@ def test_count_kbs_excludes_other_users(client: TestClient) -> None:
 
     assert client.get("/api/v1/kbs/stats/count").json() == {"count": 1}
     assert client.get("/api/v1/kbs/stats/count", headers=other).json() == {"count": 0}
+
+
+def test_list_kbs_default_pagination(client: TestClient) -> None:
+    """不带 query 参数时走 PageParams 的默认值：page=1、size=20。"""
+    for i in range(3):
+        client.post("/api/v1/kbs", json={"name": f"kb-{i}"})
+
+    r = client.get("/api/v1/kbs")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 3
+    assert body["page"] == 1
+    assert body["size"] == 20
+
+
+def test_list_kbs_size_over_limit(client: TestClient) -> None:
+    """size 超上限由 PageParams 的 Field 拦住，错误走统一 422 壳。"""
+    r = client.get("/api/v1/kbs?size=500")
+
+    assert r.status_code == 422
+    body = r.json()
+    assert body["code"] == 42200
+    assert body["message"] == "参数校验失败"
+    assert "size" in str(body["data"])
+
+
+def test_list_docs_shares_page_params(client: TestClient) -> None:
+    """文档列表复用同一个 PageParams：同一个依赖在两处生效。"""
+    kb_id = client.post("/api/v1/kbs", json={"name": "kb"}).json()["data"]["id"]
+
+    ok = client.get(f"/api/v1/kbs/{kb_id}/documents")
+    assert ok.status_code == 200
+    assert ok.json()["page"] == 1
+    assert ok.json()["size"] == 20
+
+    bad = client.get(f"/api/v1/kbs/{kb_id}/documents?size=500")
+    assert bad.status_code == 422
+    assert bad.json()["code"] == 42200

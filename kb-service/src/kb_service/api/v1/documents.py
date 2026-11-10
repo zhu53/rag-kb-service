@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, status
 
 from kb_service.api.deps import get_current_user_id
+from kb_service.schemas.common import PageParams
 from kb_service.schemas.doc import DocCreate, DocOut
 from kb_service.schemas.kb import Page
 from kb_service.services.doc_service import DocService
@@ -24,11 +26,10 @@ async def create_doc(
 @router.get("/{kb_id}/documents", summary="分页查询知识库下的文档")
 async def list_docs(
     kb_id: UUID,
-    page: int = Query(default=1, ge=1),
-    size: int = Query(default=20, ge=1, le=100),
+    params: Annotated[PageParams, Depends()],
     user_id: UUID = Depends(get_current_user_id),
 ) -> Page[DocOut]:
-    return DocService().list(kb_id, user_id, page, size)
+    return DocService().list(kb_id, user_id, params.page, params.size)
 
 
 @router.get("/{kb_id}/documents/{doc_id}", summary="文档详情")
