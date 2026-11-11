@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 
 from kb_service.api.deps import get_current_user_id
 from kb_service.schemas.common import PageParams
 from kb_service.schemas.doc import DocCreate, DocOut
 from kb_service.schemas.kb import Page
 from kb_service.services.doc_service import DocService
+from kb_service.services.indexing import run_index
 
 router = APIRouter()
 
@@ -18,9 +19,12 @@ router = APIRouter()
 async def create_doc(
     kb_id: UUID,
     body: DocCreate,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user_id),
 ) -> DocOut:
-    return DocService().create(kb_id, user_id, body)
+    doc = DocService().create(kb_id, user_id, body)
+    background_tasks.add_task(run_index, doc.id, body.content)
+    return doc
 
 
 @router.get("/{kb_id}/documents", summary="分页查询知识库下的文档")

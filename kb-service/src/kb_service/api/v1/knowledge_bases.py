@@ -15,9 +15,11 @@ router = APIRouter()
 
 @router.post(
     "",
-    status_code=status.HTTP_201_CREATED,
     summary="创建知识库",
-    response_model=ApiResponse[KBOut],
+    description="创建一个新的知识库。\n\n- 名称不可重复\n- 描述可为空",
+    response_description="创建成功，返回知识库本体",
+    responses={401: {"model": ApiResponse, "description": "未认证（code=40100）"}},
+    status_code=201,
 )
 async def create_kb(
     body: KBCreate,

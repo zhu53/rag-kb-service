@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from kb_service.api.v1 import health
 from kb_service.api.v1.router import api_router
+from kb_service.core import constants
 from kb_service.core.config import get_settings
 from kb_service.core.exceptions import AppError
 from kb_service.core.logging import TraceMiddleware, setup_logging
@@ -22,6 +23,14 @@ def create_app() -> FastAPI:
         version="0.1.0",
         docs_url="/docs" if settings.env != "prod" else None,
         redoc_url=None,
+        openapi_url="/openapi.json" if settings.env != "prod" else None,
+        description="知识库检索服务：文档上传、切块、向量索引。",
+        openapi_tags=[
+            {"name": constants.TAG_HEALTH, "description": "健康检查"},
+            {"name": constants.TAG_KBS, "description": "知识库"},
+            {"name": constants.TAG_DOCS, "description": "文档"},
+            {"name": constants.TAG_CHAT, "description": "聊天"},
+        ],
     )
 
     app.add_middleware(TraceMiddleware)
@@ -49,7 +58,7 @@ def create_app() -> FastAPI:
             ).model_dump(),
         )
 
-    app.include_router(health.router, tags=["health"])
+    app.include_router(health.router, tags=[constants.TAG_HEALTH])
     app.include_router(api_router)
     return app
 
