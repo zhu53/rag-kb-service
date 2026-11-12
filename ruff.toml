@@ -20,3 +20,14 @@ extend = "kb-service/pyproject.toml"
 #
 # 解法：让根配置的 src 指向**与 kb-service 相同**的物理目录，判定就一致了。
 src = ["kb-service/src", "kb-service/tests"]
+
+# 排除 progress/：教学材料目录，禁止被 ruff 碰。
+#
+# 事故记录（2026-11-12）：在仓库根误跑 `ruff format .`，把 progress/ 下
+# 57 个 .md 里的 Python 代码块和 20 个练习/探针 .py 全部重排——
+# 教材正文是逐行解读这些代码块的，格式一变，行号和片段引用全部错位，
+# 而教材本身不可执行，改坏了没有任何测试能报警。
+#
+# 所以这里硬性排除：progress/ 是**只读的档案**，不是代码源。
+# 需要格式化练习代码时，单独指定文件：ruff format progress/week3/kbcli/src
+extend-exclude = ["progress"]

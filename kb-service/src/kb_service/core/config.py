@@ -27,8 +27,11 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     algorithm: str = "HS256"
 
-    # Database / Cache（W7、W10 启用）
-    database_url: str = "postgresql+asyncpg://kb:kb@localhost:5432/kb"
+    # Database / Cache（W7 启用）
+    # 默认值只服务"本地零配置能跑"：sqlite 不需要账号密码。
+    # 真库地址一律走 .env / 环境变量（本机 W7 起用 mysql+pymysql://...@127.0.0.1:3307/kb_dev）。
+    # W12 上 pgvector 时改成 postgresql+psycopg://...
+    database_url: str = "sqlite:///./kb_dev.db"
     redis_url: str = "redis://localhost:6379/0"
 
     # LLM（W12 启用）
