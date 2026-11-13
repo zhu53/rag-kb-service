@@ -23,6 +23,7 @@
 | `probe_lock.py` | §七 | 只读泄漏不锁、写泄漏 `database is locked` |
 | `probe_timing.py` | §六 | 依赖收尾 vs 中间件 vs 后台任务的顺序（0→1→2→3→5→4） |
 | `probe_autoflush.py` | §4.2 / §4.3 | autoflush 触发条件 + `no_autoflush` + `begin()` 重复调用的报错原文 |
+| `probe_identity_map.py` | **§3.3** | 身份映射内部结构（`_WeakInstanceDict`，键是 `(类, 主键元组, token)`）/ `get` 第二次不发 SQL / `select` 发 SQL 但返回同一对象 / 改动后同 session 查看到内存新值 / `expunge` 出新对象 / 跨 session 的 **lost update** |
 | `probe_config.sql` | **D1b §三~§八** | 字符集四级链 / `SET NAMES` 只改三件套 / `VARCHAR(5)` 是字符数 / collation 影响相等与唯一索引 / `DATETIME` vs `TIMESTAMP` 差 8 小时 / 严格模式 vs 静默截断 / 表名小写 / `variables_info` 变量来源 |
 | `probe_pool.py` | **D1b §七** | `pool_pre_ping` 对 `KILL` 掉死连接的自动重连 / `pool_size + max_overflow` 扩容与归还 / `wait_timeout` 阈值 |
 

@@ -1,33 +1,57 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
+from sqlalchemy.orm import Session
+
 from kb_service.repositories.base import store
+from kb_service.repositories.models import KnowledgeBase
 from kb_service.repositories.rows import KBRow
 from kb_service.schemas.kb import KBCreate, KBUpdate
 
 
 class KBRepository:
-    """知识库数据访问层。
+    """知识库数据访问层（D1 过渡态）。
 
-    W7 TODO：改成 SQLAlchemy 2.0（async session），方法签名保持不变。
+    `session` 为 None 时沿用内存实现（service/API 层还在用老构造方式）；
+    传入 session 时 `create` 走数据库。D2 会把其余方法全部切过去，那时 session 变必传。
     """
 
+    def __init__(self, session: Session | None = None) -> None:
+        self.session = session
+
     def create(self, owner_id: UUID, data: KBCreate) -> KBRow:
-        kb_id = store.new_id()
-        now = store.now()
-        row: KBRow = {
-            "id": kb_id,
-            "owner_id": owner_id,
-            "name": data.name,
-            "description": data.description,
-            "doc_count": 0,
-            "created_at": now,
-            "updated_at": now,
-        }
-        store.kbs[kb_id] = row
-        return row
+        if self.session is None:
+            # ---- 过渡期分支：内存实现，等 D2 之后删掉 ----
+            kb_id = store.new_id()
+            now = store.now()
+            row: KBRow = {
+                "id": kb_id,
+                "owner_id": owner_id,
+                "name": data.name,
+                "description": data.description,
+                "doc_count": 0,
+                "created_at": now,
+                "updated_at": now,
+            }
+            store.kbs[kb_id] = row
+            return row
+
+        # ---- D1 新增：真正写库 ----
+        obj = KnowledgeBase(
+            owner_id=owner_id,
+            name=data.name,
+            description=data.description,
+            doc_count=0,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        self.session.add(obj)
+        # flush = 把 INSERT 发出去拿到主键；commit 是 service 层的事，这里不做
+        self.session.flush()
+        return obj.to_row()
 
     def get(self, kb_id: UUID) -> KBRow | None:
         return store.kbs.get(kb_id)

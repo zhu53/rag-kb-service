@@ -1,12 +1,12 @@
 # W7-D1 · Engine / Session / 事务：一条 SQL 的一生
 
-> 本周主题：MySQL + SQLAlchemy 2.0。
-> 本篇只管一件事：**一次请求里，数据库连接和事务到底是怎么被借出、用掉、还回去的。**
+> 本周主题：MySQL + SQLAlchemy 2.0。  
+> 本篇只管一件事：**一次请求里，数据库连接和事务到底是怎么被借出、用掉、还回去的。**  
 > 表设计、索引、`EXPLAIN` 放在 D2、D3。今天不设计表，今天要能"看见"连接。
 >
-> 环境（本篇所有输出都是在这台机器实测的，不是抄文档）：
-> Python 3.11.17 · SQLAlchemy **2.1.8** · FastAPI **0.150.0** · Starlette 1.9.0 · Windows
-> 数据库：**SQLite**（演示/单测）+ **MySQL 8.4.0 LTS**（本机免安装实例，端口 **3307**，已装好，见 §十五）
+> 环境（本篇所有输出都是在这台机器实测的，不是抄文档）：  
+> Python 3.11.17 · SQLAlchemy **2.1.8** · FastAPI **0.150.0** · Starlette 1.9.0 · Windows  
+> 数据库：**SQLite**（演示/单测）+ **MySQL 8.4.0 LTS**（本机免安装实例，端口 **3307**，已装好，见 §十五）  
 > 两条库上的结论都实测过，写法一致时我会标注"两边都验过"
 
 ---
@@ -40,39 +40,39 @@
 
 > **Engine 是池子（进程级，全局一个），Session 是工作台（请求级，一次请求一个）。**
 >
-> 池子里装的是**连接**（TCP/文件句柄，稀缺资源，要复用）；
+> 池子里装的是**连接**（TCP/文件句柄，稀缺资源，要复用）；  
 > 工作台上放的是**你这一个请求要改的数据**（业务状态，要隔离，用完就扔）。
 
-搞混这两个东西，后面所有坑都会踩：把 Engine 当请求级（每次请求 create_engine → 池子爆炸）、
+搞混这两个东西，后面所有坑都会踩：把 Engine 当请求级（每次请求 create_engine → 池子爆炸）、  
 把 Session 当进程级（全局共享一个 session → 一个请求未提交的数据被另一个请求看见，即越权）。
 
 **四条时间刻度，先背下来，后面逐个验证：**
 
-| 时刻 | 发生了什么 | 没发生什么 |
-|---|---|---|
-| `Session()` | 对象出生 | **没开事务**、**没借连接** |
-| 第一条 SQL | 借连接 + BEGIN | 数据还看不见 |
-| `commit()` | COMMIT，落库 | 连接**还没还**，属性被清空 |
-| `close()` | 未提交的 ROLLBACK + 还连接 | 已提交的不会回滚 |
+| 时刻          | 发生了什么               | 没发生什么             |
+| ----------- | ------------------- | ----------------- |
+| `Session()` | 对象出生                | **没开事务**、**没借连接** |
+| 第一条 SQL     | 借连接 + BEGIN         | 数据还看不见            |
+| `commit()`  | COMMIT，落库           | 连接**还没还**，属性被清空   |
+| `close()`   | 未提交的 ROLLBACK + 还连接 | 已提交的不会回滚          |
 
 ---
 
 ## §零·五 开工前的词表（不认识这些词，后面每句都是天书）
 
-这一节是给"从没碰过数据库"的人准备的。**你已经会写 Python 和 FastAPI，但 W1-W6 的数据一直躺在 dict 里，一次 SQL 都没写过**——
+这一节是给"从没碰过数据库"的人准备的。**你已经会写 Python 和 FastAPI，但 W1-W6 的数据一直躺在 dict 里，一次 SQL 都没写过**——  
 所以先把最少的词认全。认完这一节再往下读，速度会快一倍。
 
 ### 0.5.1 数据库的五个基本词（5 分钟）
 
 数据库在你眼里先只需要这样理解：**它就是一堆长得像 Excel 的表，但你只能用命令操作。**
 
-| 词 | 人话 | 类比 |
-|---|---|---|
-| **表**（table） | 一类数据的集合，固定几列 | 一个 sheet |
-| **行**（row / 记录） | 一条数据 | sheet 的一行 |
-| **列**（column / 字段） | 一个属性，有类型 | sheet 的一列 |
-| **主键**（primary key） | 能唯一认出这一行的列（如 id） | 学号 |
-| **索引**（index） | 为了查得快而额外建的结构 | 书末的索引页（D3 细讲） |
+| 词                   | 人话               | 类比            |
+| ------------------- | ---------------- | ------------- |
+| **表**（table）        | 一类数据的集合，固定几列     | 一个 sheet      |
+| **行**（row / 记录）     | 一条数据             | sheet 的一行     |
+| **列**（column / 字段）  | 一个属性，有类型         | sheet 的一列     |
+| **主键**（primary key） | 能唯一认出这一行的列（如 id） | 学号            |
+| **索引**（index）       | 为了查得快而额外建的结构     | 书末的索引页（D3 细讲） |
 
 **四条命令就够今天用**（大小写都行，习惯大写）：
 
@@ -89,20 +89,20 @@ DELETE FROM kb WHERE id = 'x';                    -- 删：删掉符合条件的
 
 ### 0.5.2 本篇的十个术语（每个都只给一句人话，展开在后面）
 
-| 术语 | 一句人话 | 没有它会怎样 |
-|---|---|---|
-| **驱动**（driver） | Python 和某种数据库之间的"翻译兼跑腿"：`pymysql`、`psycopg`、`sqlite3` | 你只能自己拼字节发 TCP |
-| **方言**（dialect） | 每种数据库的 SQL 语法差异（占位符 `?` vs `%s`、`LIMIT` 写法） | 换库要重写所有 SQL |
-| **ORM** | Object-Relational Mapping，把"表的一行"映射成"一个 Python 对象" | 每行都是 tuple，靠下标取字段（§1.1 的痛） |
-| **连接池**（pool） | 预先管好一批连接，用完放回而不是销毁 | 每次请求新建 TCP 连接，慢且会打爆数据库 |
-| **事务**（transaction） | 一组"要么全成功、要么全失败"的操作 | 转账扣了钱没到账 |
-| **`flush`** | 把内存里的改动**翻译成 SQL 发出去**，但不提交 | 你以为发过了，其实还在内存里（§4.2） |
-| **`commit`** | 让这批改动**真正生效**，别人从此看得见 | 数据只在你这一个连接里存在，进程一死就没 |
-| **`rollback`** | 撤销这批改动 | 中途出错留下半截脏数据 |
-| **ORM 对象 / 实体** | 一条记录对应的 Python 对象（`kb = KB(name="x")`） | — |
-| **DTO** | Data Transfer Object：**只用来传输的纯数据**（本项目的 `KBRow` TypedDict） | 把 ORM 对象直接传出层，session 一关就炸（§五） |
+| 术语                  | 一句人话                                                       | 没有它会怎样                         |
+| ------------------- | ---------------------------------------------------------- | ------------------------------ |
+| **驱动**（driver）      | Python 和某种数据库之间的"翻译兼跑腿"：`pymysql`、`psycopg`、`sqlite3`      | 你只能自己拼字节发 TCP                  |
+| **方言**（dialect）     | 每种数据库的 SQL 语法差异（占位符 `?` vs `%s`、`LIMIT` 写法）                | 换库要重写所有 SQL                    |
+| **ORM**             | Object-Relational Mapping，把"表的一行"映射成"一个 Python 对象"         | 每行都是 tuple，靠下标取字段（§1.1 的痛）     |
+| **连接池**（pool）       | 预先管好一批连接，用完放回而不是销毁                                         | 每次请求新建 TCP 连接，慢且会打爆数据库         |
+| **事务**（transaction） | 一组"要么全成功、要么全失败"的操作                                         | 转账扣了钱没到账                       |
+| **`flush`**         | 把内存里的改动**翻译成 SQL 发出去**，但不提交                                | 你以为发过了，其实还在内存里（§4.2）           |
+| **`commit`**        | 让这批改动**真正生效**，别人从此看得见                                      | 数据只在你这一个连接里存在，进程一死就没           |
+| **`rollback`**      | 撤销这批改动                                                     | 中途出错留下半截脏数据                    |
+| **ORM 对象 / 实体**     | 一条记录对应的 Python 对象（`kb = KB(name="x")`）                     | —                              |
+| **DTO**             | Data Transfer Object：**只用来传输的纯数据**（本项目的 `KBRow` TypedDict） | 把 ORM 对象直接传出层，session 一关就炸（§五） |
 
-> **一个必须提前分清的区别**：**ORM 对象**（`KB` 类实例，绑在 session 上、能自动变 SQL）和 **DTO**（`KBRow` 字典，纯数据、跟数据库无关）不是一回事。
+> **一个必须提前分清的区别**：**ORM 对象**（`KB` 类实例，绑在 session 上、能自动变 SQL）和 **DTO**（`KBRow` 字典，纯数据、跟数据库无关）不是一回事。  
 > 本项目的规定是：**repo 层对外只给 DTO**，ORM 对象不出 repo 的门。理由在 §五，今天就靠这条躲开 `DetachedInstanceError`。
 
 ### 0.5.3 三问自检（答不上就先补，别硬读）
@@ -117,8 +117,8 @@ DELETE FROM kb WHERE id = 'x';                    -- 删：删掉符合条件的
 
 先看"没有它会怎么做"。这是理解一切的起点——**SQLAlchemy 的每个设计，都是对下面某个具体麻烦的回应。**
 
-> **先定义 ORM**：ORM = Object-Relational Mapping，中文"对象关系映射"。一句话：**让你用 Python 对象操作表，而不是拼 SQL 字符串**。
-> `kb = KB(name="我的库")` + `session.add(kb)` 背后会生成 `INSERT INTO kb (name) VALUES ('我的库')`。
+> **先定义 ORM**：ORM = Object-Relational Mapping，中文"对象关系映射"。一句话：**让你用 Python 对象操作表，而不是拼 SQL 字符串**。  
+> `kb = KB(name="我的库")` + `session.add(kb)` 背后会生成 `INSERT INTO kb (name) VALUES ('我的库')`。  
 > 它不是"不用 SQL"，是"SQL 由它帮你写"——所以 §1.3 才说你还是得懂 SQL。
 
 ### 1.1 裸 `sqlite3` 版本（你现在也能写出来）
@@ -152,20 +152,20 @@ conn.close()  # ⑤ 忘了这行 → 连接泄漏，锁不释放
 
 ### 1.2 五个撑不住的地方（这就是 SQLAlchemy 存在的理由）
 
-| # | 裸 driver 的麻烦 | 症状 | ORM 的回应 |
-|---|---|---|---|
-| ① | 连接生命周期靠人手管 | 忘了 `close()` → 连接泄漏、锁不释放（本文 §七 实测） | Engine 池 + 依赖注入自动 `close` |
-| ② | 事务边界靠人手写 `commit()` | 一个业务动作要改两张表，中间崩了只提交了一半 | `commit()` 一次提交全部（Unit of Work） |
-| ③ | 行是 `tuple`，字段顺序靠记忆 | `row[3]` 是哪个字段？改表顺序就全崩 | `class KB` 有属性名，`kb.doc_count` |
-| ④ | SQL 是字符串，拼错要到运行时才知道 | 打错列名 → `no such column` 才报错 | 列名是 Python 属性，PyCharm 就能跳转 |
-| ⑤ | 类型全丢 | `id` 存 TEXT，读回来是 `str` 不是 `UUID` | `Mapped[UUID]` 自动转换（§九 实测有坑） |
+| # | 裸 driver 的麻烦        | 症状                                 | ORM 的回应                         |
+| - | ------------------- | ---------------------------------- | ------------------------------- |
+| ① | 连接生命周期靠人手管          | 忘了 `close()` → 连接泄漏、锁不释放（本文 §七 实测） | Engine 池 + 依赖注入自动 `close`       |
+| ② | 事务边界靠人手写 `commit()` | 一个业务动作要改两张表，中间崩了只提交了一半             | `commit()` 一次提交全部（Unit of Work） |
+| ③ | 行是 `tuple`，字段顺序靠记忆  | `row[3]` 是哪个字段？改表顺序就全崩             | `class KB` 有属性名，`kb.doc_count`  |
+| ④ | SQL 是字符串，拼错要到运行时才知道 | 打错列名 → `no such column` 才报错        | 列名是 Python 属性，PyCharm 就能跳转      |
+| ⑤ | 类型全丢                | `id` 存 TEXT，读回来是 `str` 不是 `UUID`   | `Mapped[UUID]` 自动转换（§九 实测有坑）    |
 
-> **一句话**：driver 只解决"怎么把 SQL 发给数据库"，**不解决"谁在什么时候管连接、管事务、管对象"**。
+> **一句话**：driver 只解决"怎么把 SQL 发给数据库"，**不解决"谁在什么时候管连接、管事务、管对象"**。  
 > SQLAlchemy 解决的是后半句。
 
 ### 1.3 那为什么还要懂 SQL？
 
-因为 **ORM 不替你写 SQL，它只是帮你生成 SQL**。今天的动手任务里，你要做的第一件事就是
+因为 **ORM 不替你写 SQL，它只是帮你生成 SQL**。今天的动手任务里，你要做的第一件事就是  
 **打开 `echo=True` 把 ORM 生成的 SQL 打出来看**——看不见 SQL 的人，调不了数据库性能（D3 的 `EXPLAIN` 就无从谈起）。
 
 ---
@@ -173,6 +173,7 @@ conn.close()  # ⑤ 忘了这行 → 连接泄漏，锁不释放
 ## §二 最小可跑示例（5 分钟，亲手跑一遍）
 
 先跑起来，再讲概念。**跑之前先在纸上猜三件事**（写在纸笔本上，回头对答案）：
+
 1. 建表时 `echo=True` 会打出几条 SQL？
 2. 第一次 `session.execute(...)` 之前，`session.in_transaction()` 是 `True` 还是 `False`？
 3. `commit()` 之后再读 `kb.name`，会再发一条 SELECT 吗？
@@ -273,29 +274,29 @@ F) 读完后 kb.__dict__ 有 name 吗 = True
 
 四个必须注意的点：
 
-1. **`BEGIN (implicit)` 出现了 3 次**——不是"一个 session 一个事务"，是**一条业务动作一个事务**。
+1. **`BEGIN (implicit)` 出现了 3 次**——不是"一个 session 一个事务"，是**一条业务动作一个事务**。  
    `commit()` 结束后事务就没了，下一条 SQL 会再开一个。这就是 §零 说的"事务的边界是 commit，不是 session 的生命"。
-2. **`D) False` 是今天最反直觉的一行**：`commit()` 之后对象里的属性被**主动清空**了，再读就有了
+2. **`D) False` 是今天最反直觉的一行**：`commit()` 之后对象里的属性被**主动清空**了，再读就有了  
    `F)` 那条多余的 `SELECT`。这是 `expire_on_commit=True`（默认值）干的事，§五 专门讲。
 3. `create_all` 前的 `PRAGMA main.table_info` 说明它**先查后建**——所以它幂等，跑 100 次也只建一次。
-4. `CREATE TABLE` 里的 `VARCHAR(50)` 是 `String(50)` 生成的。**SQLite 根本不校验长度**（它没有真正的 VARCHAR，
-   写 200 个字符它也收），MySQL 会校验（严格模式下超长直接报错 `1406 Data too long`）。
-   **这就是"方言差异"**（§0.5.2 那个词）：同一份 Python 代码，不同数据库的真实行为不同——
+4. `CREATE TABLE` 里的 `VARCHAR(50)` 是 `String(50)` 生成的。**SQLite 根本不校验长度**（它没有真正的 VARCHAR，  
+   写 200 个字符它也收），MySQL 会校验（严格模式下超长直接报错 `1406 Data too long`）。  
+   **这就是"方言差异"**（§0.5.2 那个词）：同一份 Python 代码，不同数据库的真实行为不同——  
    所以 §十 的实验里凡是"行为"类的结论，都要在真 MySQL 上再验一遍。
 
 ---
 
 ## §三 四个对象，谁是谁（本篇的核心概念区）
 
-新手最容易糊的是这四个词：Engine / Connection / Session / Transaction。
+新手最容易糊的是这四个词：Engine / Connection / Session / Transaction。  
 一句话版本：
 
-| 对象 | 是什么 | 生命周期 | 类比 |
-|---|---|---|---|
-| **Engine** | 连接池 + 数据库方言（知道怎么把 Python 翻译成这种 DB 的 SQL） | **进程级，全局一个** | 自来水厂 + 管道 |
-| **Connection** | 池子里借出的一条物理连接 | 一次借还 | 一个水龙头 |
-| **Session** | 工作台：身份映射 + 待提交改动 + 事务句柄 | **请求级，一次请求一个** | 一张办公桌 |
-| **Transaction** | 一次原子操作的边界 | 从第一条 SQL 到 `commit`/`rollback` | 桌上摊开的一叠文件 |
+| 对象              | 是什么                                      | 生命周期                           | 类比        |
+| --------------- | ---------------------------------------- | ------------------------------ | --------- |
+| **Engine**      | 连接池 + 数据库方言（知道怎么把 Python 翻译成这种 DB 的 SQL） | **进程级，全局一个**                   | 自来水厂 + 管道 |
+| **Connection**  | 池子里借出的一条物理连接                             | 一次借还                           | 一个水龙头     |
+| **Session**     | 工作台：身份映射 + 待提交改动 + 事务句柄                  | **请求级，一次请求一个**                 | 一张办公桌     |
+| **Transaction** | 一次原子操作的边界                                | 从第一条 SQL 到 `commit`/`rollback` | 桌上摊开的一叠文件 |
 
 ### 3.1 Engine 为什么必须是进程级单例
 
@@ -305,38 +306,189 @@ F) 读完后 kb.__dict__ 有 name 吗 = True
 2. **装载方言**（dialect）：`mysql+pymysql://`、`postgresql+psycopg://`、`sqlite:///` 各一套，负责 SQL 语法与参数占位符差异；
 3. **解析 URL**。
 
-这三件事都**不该每个请求做一次**。每请求 `create_engine` 的后果不是"慢一点"，
-而是**每请求一个池子**——池子里的连接没人回收，数据库侧连接数几分钟就顶到上限（MySQL 默认 `max_connections=151`），
+这三件事都**不该每个请求做一次**。每请求 `create_engine` 的后果不是"慢一点"，  
+而是**每请求一个池子**——池子里的连接没人回收，数据库侧连接数几分钟就顶到上限（MySQL 默认 `max_connections=151`），  
 然后所有请求开始报 `Too many connections`。这是新手最常犯的线上事故之一。
 
-> 本项目写法（D1 动手任务要你写）：`core/db.py` 里模块级 `engine = create_engine(...)`，
+
+> 本项目写法（D1 动手任务要你写）：`core/db.py` 里模块级 `engine = create_engine(...)`，  
 > **模块只会被 import 一次**，所以它就是进程级单例。
 
 ### 3.2 Session 为什么必须是请求级
 
 Session 里装了三样东西，全都**不能跨请求共享**：
 
-| Session 里的东西 | 作用 | 跨请求共享会怎样 |
-|---|---|---|
-| **身份映射**（identity map） | 同一事务里，同一主键只对应一个 Python 对象 | 请求 A 改过的对象，请求 B 拿到的是内存里那个脏的 |
-| **待提交改动**（unit of work） | `add`/`delete` 攒着，commit 时一起发 | 请求 A 没提交的改动会被请求 B 的 commit 顺手提交掉 → **越权写入** |
-| **事务句柄** | 一条连接 + 一个事务 | 两个人共用一个事务，谁 commit 谁 rollback 说不清 |
+| Session 里的东西            | 作用                                   | 跨请求共享会怎样                                              |
+| ----------------------- | ------------------------------------ | ----------------------------------------------------- |
+| **身份映射**（identity map）  | 同一 session 里，同一主键只对应**一个** Python 对象 | 两个请求拿到的是**同一个对象**：B 看到 A 改了一半的字段，B 再改一次就盖掉 A（详见 §3.3） |
+| **待提交改动**（unit of work） | `add`/`delete` 攒着，commit 时一起发        | 请求 A 没提交的改动会被请求 B 的 commit 顺手提交掉 → **越权写入**           |
+| **事务句柄**                | 一条连接 + 一个事务                          | 两个人共用一个事务，谁 commit 谁 rollback 说不清                     |
 
-W6 你学过"依赖缓存的生命周期 = 单次请求"，那条结论在这里变成了硬需求：
-`get_db` 用 `yield` 依赖 + FastAPI 的依赖缓存，**一次请求内所有需要 DB 的地方拿到的是同一个 Session**；
+W6 你学过"依赖缓存的生命周期 = 单次请求"，那条结论在这里变成了硬需求：  
+`get_db` 用 `yield` 依赖 + FastAPI 的依赖缓存，**一次请求内所有需要 DB 的地方拿到的是同一个 Session**；  
 请求结束依赖收尾 `close()`，下一个请求拿新的。
 
-### 3.3 身份映射（identity map）实测
+### 3.3 身份映射（identity map）：为什么"1 号"在同一个 session 里只可能有一个对象
 
-同一个 Session 里两次按主键取对象，**第二次不发 SQL**，直接给同一个对象：
+这一节是 §三 里最抽象的一个概念，所以分五步讲：**没有它会怎样 → 它是什么 → 实测 → 什么时候失效 → 错在哪**。
+
+#### 3.3.1 先说没有它会怎样
+
+假设 session 没有这张表。那么你写：
+
+```python
+kb = session.get(KB, 1)        # 查库，造出一个 Python 对象 A
+kb.name = "新名字"              # 改 A 的属性（还没提交）
+other = session.get(KB, 1)     # 又查一次库，造出对象 B —— B.name 还是旧值
+```
+
+于是同一个请求里，**1 号知识库有了两个 Python 对象**：
 
 ```
-J) 同一 session 两次 get 同一主键 a is b = True
+A: name = "新名字"   ← 你改过的
+B: name = "旧值"     ← 数据库里那行
 ```
 
-这就是为什么"一次操作一个 session"（每条 SQL 新建 Session）是错的：
-① 每建一个 Session 就借还一次连接，池子被无谓地抖动；
-② 同一行在两个 Session 里是两个对象，改了一个另一个不知道 → 覆盖写（lost update）。
+接下来任何拿到 `B` 的代码都看不到你的修改。更麻烦的是关系维护：`kb.docs` 这个集合，  
+在 A 上加了文档，B 上看不见——**同一个"东西"在内存里分裂成几份，谁也不知道谁改了什么**。
+
+这不是 SQLAlchemy 独有的问题，**所有 ORM 都必须解决它**，解法也都一样：在会话里维护一张  
+"我是谁 → 我对应的那个 Python 对象"的登记表，取之前先查表。
+
+#### 3.3.2 它是什么：一张"身份 → 对象"的表
+
+**身份映射（identity map）= session 内部的一个字典**：
+
+```
+键：这个对象是谁          →  (类, 主键元组, identity_token)
+值：对应的 Python 对象本身  →  <KB object at 0x...>
+```
+
+**类比：会议室门口的名册。**  
+一次 session 就是一场会议。同一个工号的人，**在这一场会议里只有一个座位**。
+
+- 你要见 1 号 → 前台先翻名册；
+- 名册上有 → 直接把册上那个人叫来（**不发 SQL**）；
+- 名册上没有 → 去数据库请人（**发 SQL**），请回来立刻在册上登记；
+- 散会（`close()`）→ 名册作废，下次开会重新登记。
+
+所以"身份映射"这个名字的意思就是：**把"数据库里的身份（主键）"映射到"内存里的那个对象"**。
+
+#### 3.3.3 实测（跑之前先猜：第二次 `get` 会不会发 SQL？）
+
+探针在 `progress/week7/probes/probe_identity_map.py`，直接跑：
+
+```powershell
+# Windows PowerShell（仓库根）
+.\kb-service\.venv\Scripts\python.exe .\progress\week7\probes\probe_identity_map.py
+```
+
+真实输出（SQLAlchemy 2.1.8 / Python 3.11.17 / SQLite）：
+
+```text
+A) 第一次 get(KB, 1): 发了 1 条 SELECT
+B) 第二次 get(KB, 1): 累计 1 条 SELECT（没增加 = 没查库）| a is b -> True
+C) identity_map 类型=_WeakInstanceDict 长度=1
+   key=(<class '__main__.KB'>, (1,), None)
+   value is a -> True
+D) 用 select() 查同一行: 发了 1 条 SELECT | c is a -> True
+E) 把 a.name 改掉，再 select 一次，看拿到的是新值还是库里的旧值:
+   d is a -> True | d.name = '改过的名字'
+F) expunge(a) 之后再 get:
+   e is a2 -> False | map 长度=1
+G) 两个 Session 各 get 同一行（身份映射不跨 Session）:
+   o1 is o2 -> False（同一个主键，两个对象）
+   最终库里 name = 'session2 写的（基于它读到的旧值）'
+   ↑ session1 的改动被静默覆盖了 —— 这就是 lost update
+```
+
+逐条读：
+
+| 行       | 说明                                                                                                                                                            |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A→B** | 第一次 `get` 发 1 条 `SELECT` 并登记；第二次 `get` **一条 SQL 都没发**，因为查表就命中了                                                                                                |
+| **C**   | `identity_map` 的实际类型是 `_WeakInstanceDict`——**就是个字典**。键 `(KB, (1,), None)` 三段分别是：**类**、**主键元组**、**identity_token**（普通映射永远是 `None`，多绑定/分片才用得上，属于支线，先不管）。值就是对象本体 |
+| **D**   | `select()` 和 `get()` 不一样：**它一定会发 SQL**（1 条）。但查回来的行发现"这个人册上已经有了"，就**不拿这行数据去覆盖册上对象的属性**（除非你显式加 `populate_existing()`），直接返回册上那个对象 → `c is a` 为 True              |
+| **E**   | 所以你在同一个 session 里改完属性再查，看到的是**内存里那个对象的新值**，不是库里的旧值。这也是为什么"改完想确认存进去没有"不能靠在同一个 session 再查一次                                                                     |
+| **F**   | `expunge()` 是把一个人从名册上划掉。之后再 `get` 就是**新对象**（`e is a2` → False），册子长度仍是 1（旧的走了，新的进来）                                                                            |
+| **G**   | 换一个 session = 换一场会议 = **另一本名册**。同一个主键必然是**两个对象**，互相不知道对方改了什么                                                                                                  |
+
+#### 3.3.4 最容易记错的一点：`get()` 和 `select()` 的区别
+
+|           | `session.get(KB, 1)`  | `session.scalars(select(KB).where(...))` |
+| --------- | --------------------- | ---------------------------------------- |
+| 先查身份映射吗   | **先查，命中就直接返回，不发 SQL** | 不查，**一定发 SQL**                           |
+| 返回的是已有对象吗 | 是                     | **也是**（结果被身份映射"截胡"，丢弃行数据，返回册上那个对象）       |
+| 什么时候用     | 按主键取单条（最高频）           | 条件查询、批量查询                                |
+
+> 一句话：**`get()` 能省 SQL，`select()` 不能；但两者在"同一 session 内对象唯一"这条上一样。**
+
+#### 3.3.5 对象什么时候"出册"（身份映射失效的四种情况）
+
+| 动作                                             | 结果                                 | 本项目会碰到吗     |
+| ---------------------------------------------- | ---------------------------------- | ----------- |
+| `session.expunge(obj)`                         | 单个对象出册，再取是新对象                      | 很少用         |
+| `session.close()` / 请求结束                       | **整本册子作废**，对象变 detached（§五）        | **每请求都会**   |
+| `session.commit()`（默认 `expire_on_commit=True`） | 对象还在册上，但**属性被清空**，下次访问触发新 `SELECT` | **每次写操作都会** |
+| 换一个 session                                    | 必然是两个对象（G 行），**身份映射不跨 session**    | **每个新请求都是** |
+
+#### 3.3.6 所以"一次操作一个 session"到底错在哪
+
+原教材这里我写的是"覆盖写"，不够准确。用 G 行的实测说清楚：
+
+```text
+库里初始：name = '初始'
+s1 读到 '初始'，改成 'session1 写的'，commit      → 库里 = 'session1 写的'
+s2 早就读到 '初始'（它不知道 s1 改过），改成 'session2 写的（基于它读到的旧值）'，commit
+                                                      → 库里 = 'session2 写的...'
+```
+
+**s1 的改动静默消失了。**&#x6CA1;有任何报错、没有冲突提示——第二次 `UPDATE` 把第一次的整列覆盖掉。  
+这是"读—改—写"的经典竞态（lost update），身份映射不仅救不了它，**反而是它的成因之一**：  
+两个 session 各持一个对象，各自基于"自己读到的旧值"做决定。
+
+这条正好接 D4：真要靠数据库解决，得上**版本号（乐观锁）**&#x6216; `SELECT ... FOR UPDATE`（悲观锁），  
+D4 会实测。
+
+<details>
+
+<summary>因为 session 是**事务边界**。跨 session 共享对象意味着共享一份"待提交改动"，  
+两个请求的写入会被混进同一个事务——那才是更严重的问题：请求 A 失败回滚，会把请求 B 的写入一起回滚掉。  
+身份映射的边界必须和事务边界对齐，这是设计约束，不是偷懒。</summary>
+
+
+
+</details>
+
+<details>
+
+<summary>`commit()` 之后这个事务结束了，库里可能已经被别人改了。为了不给你"过期数据"，  
+SQLAlchemy 默认把对象上的属性全部标记为过期（`expire`），下次访问该属性就重新 `SELECT` 一次。  
+对象身份还是同一个（`id()` 不变），但**数据是重新读的**——所以 §五 讲 `expire_on_commit=False`  
+和 detached 时，会看到"对象还在，但读属性会炸"的另一半原因。</summary>
+
+</details>
+
+#### 3.3.7 面试怎么问（30 秒版）
+
+> **问：SQLAlchemy 的 identity map 是什么？**
+>
+> 答：session 内部维护的一张"主键 → Python 对象"的映射表，保证同一个 session 里同一行数据  
+> 只对应一个对象。所以按主键 `get()` 第二次不发 SQL；用 `select()` 仍然发 SQL，但返回的  
+> 对象还是同一个。它的边界就是 session 的边界，`close()` 之后失效，跨请求必然是两个对象。
+
+追问链（面试官往下挖）：
+
+1. **机制**：`get()` 和 `select()` 在这件事上有区别吗？→ 有，`get()` 先查映射，`select()` 一定发 SQL 再被"截胡"。
+2. **边界/故障**：两个请求同时改同一行会怎样？→ lost update，后提交覆盖先提交，且**没有报错**；要靠版本号或行锁解决（D4）。
+3. **场景落地**：那"每条 SQL 一个 session"行不行？→ 不行，一是池子抖动，二是同一请求内对象会分裂成多份，改了一个另一个不知道。
+
+#### 3.3.8 本项目落点
+
+`get_db` 是**一次请求一个 session**，所以一次请求内 `kb_repo.get(kb_id)` 无论被调用几次，  
+拿到的都是同一个 `KB` 对象。service 层改了它的字段，路由层序列化时看到的就是新值——  
+**这就是为什么 DTO 转换（`KBOut`）必须发生在同一个 session 内**：一旦出了 session，  
+对象 detached，连属性都读不出来（§五）。
 
 ---
 
@@ -351,15 +503,15 @@ INSERT INTO documents (...) VALUES (...);      -- ① 成功
 UPDATE kb SET doc_count = doc_count + 1 WHERE id = 'x';   -- ② 服务器这时候断电
 ```
 
-结果：文档建好了，计数没加。**数据库里从此有一条"多出来的文档"，而计数永远少 1。** 这种错不会报错，
+结果：文档建好了，计数没加。**数据库里从此有一条"多出来的文档"，而计数永远少 1。** 这种错不会报错，  
 只会在某天对账时发现，而且你根本不知道是什么时候、哪个请求造成的。
 
-**事务就是解决这个的**：把 ① ② 包成"一组"，要么全成功，要么全撤销。
+**事务就是解决这个的**：把 ① ② 包成"一组"，要么全成功，要么全撤销。  
 数据库保证这件事的方式是**先记日志再改数据**（redo/undo 日志），所以它能"撤销"——这不是魔法，是写日志的代价。
 
 **四个词，一句人话**（§0.5.2 已给过 `flush`/`commit`/`rollback`，这里补最关键的那个）：
 
-- **autobegin** = automatic begin，"**自动开事务**"。你不写 `BEGIN`，SQLAlchemy 在你**第一次执行 SQL 时**替你写。
+- **autobegin** = automatic begin，"**自动开事务**"。你不写 `BEGIN`，SQLAlchemy 在你**第一次执行 SQL 时**替你写。  
   这就是为什么 `Session()` 那一刻没有事务（它懒得开），而第一条 SQL 一来就有了。
 - **隔离级别**（D4 细讲）：两个事务同时跑，互相能看见多少。MySQL 默认 `REPEATABLE-READ`（可重复读）。
 
@@ -367,16 +519,16 @@ UPDATE kb SET doc_count = doc_count + 1 WHERE id = 'x';   -- ② 服务器这时
 
 下面每个格子都实测过（脚本见 §十 实验一）：
 
-| 你做的事 | 事务状态 | 库里有没有数据 | 别的 Session 看得见吗 |
-|---|---|---|---|
-| `Session(engine)` | **没开** （`in_transaction() == False`） | — | — |
-| `execute(SELECT ...)` | 开启（autobegin） | — | — |
-| `add()` 只放进内存 | 没变 | 没有 | 没有 |
-| `flush()` | 事务进行中，**INSERT 已发出** | 事务内可见 | **看不见**（隔离） |
-| `commit()` | 结束，事务销毁 | **有** | **看得见** |
-| `rollback()` | 结束，改动丢弃 | 没有 | 没有 |
-| `close()`（未提交） | 结束，**等价 rollback** | **没有** | 没有 |
-| `close()`（已提交） | 无事务可回滚 | 有（**不会丢**） | 看得见 |
+| 你做的事                  | 事务状态                                 | 库里有没有数据    | 别的 Session 看得见吗 |
+| --------------------- | ------------------------------------ | ---------- | --------------- |
+| `Session(engine)`     | **没开** （`in_transaction() == False`） | —          | —               |
+| `execute(SELECT ...)` | 开启（autobegin）                        | —          | —               |
+| `add()` 只放进内存         | 没变                                   | 没有         | 没有              |
+| `flush()`             | 事务进行中，**INSERT 已发出**                 | 事务内可见      | **看不见**（隔离）     |
+| `commit()`            | 结束，事务销毁                              | **有**      | **看得见**         |
+| `rollback()`          | 结束，改动丢弃                              | 没有         | 没有              |
+| `close()`（未提交）        | 结束，**等价 rollback**                   | **没有**     | 没有              |
+| `close()`（已提交）        | 无事务可回滚                               | 有（**不会丢**） | 看得见             |
 
 实测输出（`scratch/d1_tx.py`，§十 实验一）：
 
@@ -391,12 +543,12 @@ K) with begin() 后 库里 = 2 | 块结束后 in_transaction = False
 
 ### 4.2 `flush` 和 `commit` 的区别（面试必问）
 
-- **`flush()` = 把内存改动翻译成 SQL 发给数据库，但不提交。** 此时数据在本事务内可见（自己查得到），
+- **`flush()` = 把内存改动翻译成 SQL 发给数据库，但不提交。** 此时数据在本事务内可见（自己查得到），  
   别人看不见；数据库的锁**已经加上了**（§七 的 `database is locked` 就是它引起的）。
 - **`commit()` = 先自动 flush，再发 COMMIT。** 所以"我只 commit 没 flush 会不会丢" → 不会，commit 内部会 flush。
 
-**自动 flush 还有一个隐藏触发点**：你在同一个事务里 `execute` 一条 SELECT，SQLAlchemy 会**先自动 flush 再查**，
-否则查出来的数据和你内存里的改动不一致。这条规则叫 **autoflush**，默认开。
+**自动 flush 还有一个隐藏触发点**：你在同一个事务里 `execute` 一条 SELECT，SQLAlchemy 会**先自动 flush 再查**，  
+否则查出来的数据和你内存里的改动不一致。这条规则叫 **autoflush**，默认开。  
 它是"零症状 bug"的经典来源（见 §八 易错点 3）。
 
 ### 4.3 `with session.begin():` 有什么好处
@@ -406,8 +558,8 @@ with session.begin():  # 进块：开事务；正常出块：COMMIT；抛异常�
     session.add(KB(name="事务块"))
 ```
 
-它替你把 `try/except/rollback` 写好了。**注意**：`session.begin()` 要求"当前没有事务"，
-所以不能和"外层已经 autobegin 了"的场景混用，会报 `A transaction is already begun on this Session`。
+它替你把 `try/except/rollback` 写好了。**注意**：`session.begin()` 要求"当前没有事务"，  
+所以不能和"外层已经 autobegin 了"的场景混用，会报 `A transaction is already begun on this Session`。  
 本项目用「依赖层 close + service 层显式 commit」的写法，不靠这个上下文管理器，原因在 §六。
 
 ---
@@ -418,11 +570,11 @@ with session.begin():  # 进块：开事务；正常出块：COMMIT；抛异常�
 
 §二 的 `D) False` / `E) 又查了一次库` 就是这个。默认配置下：
 
-> **`commit()` 成功后会把这个 Session 里所有对象的属性全部标记为"过期"（expire），
+> **`commit()` 成功后会把这个 Session 里所有对象的属性全部标记为"过期"（expire），  
 > 下次访问任何属性都要重新 SELECT 一次。**
 
-为什么这么设计？因为**你以为你提交的数据，可能已经被数据库改了**：
-触发器改了字段、`onupdate` 改了 `updated_at`、别的并发事务改了行、数据库做了类型转换（§九 的 UUID）。
+为什么这么设计？因为**你以为你提交的数据，可能已经被数据库改了**：  
+触发器改了字段、`onupdate` 改了 `updated_at`、别的并发事务改了行、数据库做了类型转换（§九 的 UUID）。  
 提交后一律作废重取，是"宁可多查一次，也不给你错数据"的保守选择。
 
 ### 5.2 两个后果
@@ -449,10 +601,10 @@ attribute refresh operation cannot proceed (Background on this error at: https:/
 
 对比实测（`expire_on_commit` 两种配置）：
 
-| 配置 | `commit()` 后 `kb.__dict__` 里有 `name` 吗 | `close()` 后读 `kb.name` |
-|---|---|---|
-| 默认（`expire_on_commit=True`） | **False**（被清空） | **`DetachedInstanceError`** |
-| `expire_on_commit=False` | **True**（保留） | **`'x'`**，正常读到 |
+| 配置                          | `commit()` 后 `kb.__dict__` 里有 `name` 吗 | `close()` 后读 `kb.name`      |
+| --------------------------- | -------------------------------------- | --------------------------- |
+| 默认（`expire_on_commit=True`） | **False**（被清空）                         | **`DetachedInstanceError`** |
+| `expire_on_commit=False`    | **True**（保留）                           | **`'x'`**，正常读到              |
 
 ### 5.3 本项目怎么选
 
@@ -461,18 +613,19 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 ```
 
 理由（三条都要能说出来）：
-1. **handler 要把 ORM 对象交给 `response_model` 序列化**，而依赖收尾的 `close()` 发生在序列化之后（§六 实测顺序），
+
+1. **handler 要把 ORM 对象交给 `response_model` 序列化**，而依赖收尾的 `close()` 发生在序列化之后（§六 实测顺序），  
    如果属性全过期，序列化时每条属性再查一次库，白白多几十条 SQL；
-2. **`expire_on_commit=False` 不等于"用过期的数据"**：提交后没人改这一行，内存里的值就是库里的值。
+2. **`expire_on_commit=False` 不等于"用过期的数据"**：提交后没人改这一行，内存里的值就是库里的值。  
    真怕过期，正确做法是显式 `session.refresh(obj)`，**把"我要最新数据"变成一个看得见的动作**；
-3. 返回 DTO 而不是 ORM 对象时（本项目 `rows.py` 的 `KBRow` TypedDict），这条就没那么关键，
+3. 返回 DTO 而不是 ORM 对象时（本项目 `rows.py` 的 `KBRow` TypedDict），这条就没那么关键，  
    但**测试里断言对象字段时会舒服很多**（不会因为 session 已关而炸）。
 
-> **易错点**：`expire_on_commit=False` **不能**解决 `DetachedInstanceError` 的另一半原因——
-> **懒加载**。**懒加载（lazy load）**＝"关系数据先不查，等你真的访问它时才查"：
-> 比如 `kb.docs` 这种"这个知识库有哪些文档"的列表，SQLAlchemy 默认**不会**在你查 `kb` 时一起查出来，
-> 而是等你写 `for d in kb.docs` 的那一刻才发一条 `SELECT * FROM documents WHERE kb_id=?`。
-> 问题是：**session 关掉之后就没法再发 SQL 了**，于是"访问一个从没加载过的关系属性"必然炸。
+> **易错点**：`expire_on_commit=False` **不能**解决 `DetachedInstanceError` 的另一半原因——  
+> **懒加载**。**懒加载（lazy load）**＝"关系数据先不查，等你真的访问它时才查"：  
+> 比如 `kb.docs` 这种"这个知识库有哪些文档"的列表，SQLAlchemy 默认**不会**在你查 `kb` 时一起查出来，  
+> 而是等你写 `for d in kb.docs` 的那一刻才发一条 `SELECT * FROM documents WHERE kb_id=?`。  
+> 问题是：**session 关掉之后就没法再发 SQL 了**，于是"访问一个从没加载过的关系属性"必然炸。  
 > 区别记清楚：`expire_on_commit` 管的是"**加载过但作废了**"，懒加载管的是"**压根没加载过**"。
 
 ---
@@ -506,10 +659,18 @@ def get_db() -> Iterator[Session]:
         session.close()
 ```
 
+
 `pool_pre_ping=True` 的作用：从池子里借出的连接先发一个轻量探测（MySQL 上是 `SELECT 1` 之类），
 死了就换一条。**为什么需要**：MySQL 的 `wait_timeout` 默认 8 小时，把空闲连接单方面踢掉；
 池子里那条"以为活着"的连接下次用时才报 `MySQL server has gone away`。这个错误在"服务跑了一夜第二天第一个请求"时出现，
 是典型的"零症状→突然全挂"。
+
+> **为什么是 `from collections.abc import Iterator` 而不是 `from typing import Iterator`**：
+> 老教程（Python 3.5 时代）都写 `typing.Iterator`。Python 3.9 起（PEP 585）`collections.abc` 里的类
+> 本身就能加下标（`Iterator[Session]`），`typing` 里那些留作兼容别名，3.12+ 用起来会发 DeprecationWarning。
+> 本项目 ruff 开了 `UP` 规则组（`pyproject.toml` 的 `select`），写 `typing.Iterator` 会被 **UP035** 直接拦下
+> （实测：`Import from collections.abc instead: Iterator`）。**跟项目走，用 `collections.abc`。**
+> 另外注意模块名是复数：`collections` 包下的 `abc`（Abstract Base Classes，抽象基类）子模块。
 
 ### 6.2 关键实测：依赖收尾到底在第几步
 
@@ -627,20 +788,39 @@ FastAPI 0.150 的 `Depends` 有 `scope` 参数，实测三种配置：
 **连库 / 看库（客户端不在 PATH 里，写全路径）**
 
 ```powershell
-# Windows PowerShell
+# Windows PowerShell —— 日常用 kb（应用账号，只有 kb_dev 库的权限）
 $MYSQL = "F:\WorkBuddy\2026-10-20-08-44-29\tools\mysql-8.4.0\bin\mysql.exe"
 & $MYSQL -h 127.0.0.1 -P 3307 -u kb -pkb_dev_pwd kb_dev -e "SHOW TABLES;"
 & $MYSQL -h 127.0.0.1 -P 3307 -u kb -pkb_dev_pwd kb_dev -e "SELECT VERSION(), @@transaction_isolation, @@time_zone;"
-& $MYSQL -h 127.0.0.1 -P 3307 -u kb -pkb_dev_pwd -e "SHOW PROCESSLIST;"          # 谁连着、在跑什么
-& $MYSQL -h 127.0.0.1 -P 3307 -u kb -pkb_dev_pwd -e "SHOW ENGINE INNODB STATUS\G" # D4 看锁/死锁用
+
+# —— 诊断类命令必须用 root（观察员账号），kb 会报权限错误 ——
+& $MYSQL -h 127.0.0.1 -P 3307 -u root -e "SHOW PROCESSLIST;"                    # 谁连着、在跑什么
+& $MYSQL -h 127.0.0.1 -P 3307 -u root -e "SHOW ENGINE INNODB STATUS\G"          # D4 看锁/死锁用
+& $MYSQL -h 127.0.0.1 -P 3307 -u root -e "SELECT * FROM performance_schema.data_locks;"  # D4 看行锁明细
 ```
 
 ```bash
 # Git Bash / Linux / macOS
 MYSQL="F:/WorkBuddy/2026-10-20-08-44-29/tools/mysql-8.4.0/bin/mysql.exe"
 "$MYSQL" -h 127.0.0.1 -P 3307 -u kb -pkb_dev_pwd kb_dev -e "SHOW TABLES;"
-"$MYSQL" -h 127.0.0.1 -P 3307 -u kb -pkb_dev_pwd -e "SHOW PROCESSLIST;"
+"$MYSQL" -h 127.0.0.1 -P 3307 -u root -e "SHOW PROCESSLIST;"
 ```
+
+> **为什么诊断命令要换 root（2026-11-12 实测踩坑）**：`kb` 的权限是
+> `GRANT ALL PRIVILEGES ON kb_dev.*` —— **只在 kb_dev 这一个库里是全能的**，出了库什么都没有。
+> 三类诊断命令都在它的权限之外：
+>
+> | 命令 | kb 的下场 | 需要什么 |
+> |---|---|---|
+> | `SHOW ENGINE INNODB STATUS` | `ERROR 1227: you need the PROCESS privilege` | **PROCESS 是全局权限**（`ON *.*`），没法只授给一个库 |
+> | `SELECT * FROM performance_schema.data_locks` | `ERROR 1142: SELECT command denied` | performance_schema 表的 SELECT（全局） |
+> | `SHOW PROCESSLIST` | **不报错，但只看到自己**（实测 kb 只有 1 行；root 能看到 event_scheduler） | 有 PROCESS 才能看到**别人**的线程 |
+>
+> 注意第三种最阴险：不报错、结果也"像是对的"，只是少了几行——这类权限问题**可能根本不报错**。
+>
+> 这不是要给 kb 补权限，而是**故意不给**：应用账号拿全局 PROCESS 意味着它能看到服务器上所有连接，
+> 万一账号泄露攻击面立刻变大。**应用账号最小权限 + 诊断用管理员账号**是线上标准做法，
+> 你公司里大概率也是这么分的（应用连库账号查不了 `SHOW ENGINE INNODB STATUS`）。
 
 **跑 Python / 跑测试（务必用项目 venv，不要用系统 python）**
 
@@ -769,6 +949,8 @@ H) 读回 id 类型 = UUID | created_at tzinfo = None
 - `class KnowledgeBase(Base)`：表名 `knowledge_bases`
 - 字段对齐现有 `KBRow`（`repositories/rows.py`）：
   `id: UUID`（主键，`default=uuid4`）、`owner_id: UUID`（索引）、`name: str(100)`、
+|  |  |
+| --- | --- |
   `description: str | None`（`String(500)`，可空）、`doc_count: int`（默认 0）、
   `created_at` / `updated_at`（`DateTime(timezone=True)`，`default=lambda: datetime.now(UTC)`）
 - 提供 `to_row(self) -> KBRow`：把 ORM 对象转成现有 TypedDict（这是 §五 的"返回 DTO"实践）
@@ -802,6 +984,7 @@ database_url: str = "postgresql+asyncpg://kb:kb@localhost:5432/kb"
 **这颗雷是**：这是**异步驱动**的 URL（`asyncpg`），必须配 `create_async_engine()`；
 今天我们要 `create_engine()`（同步），直接拿它去建引擎 → 启动即报错（模块没装或驱动不匹配）。
 而且本机没有 Postgres，默认值指向一个不存在的东西 = 新人 clone 下来第一步就跑不起来。
+
 
 **已经替你改好了**（这一条和"配置不该硬编码"不冲突，理由在下面）：
 
@@ -920,56 +1103,76 @@ pool 太小请求排队，太大把 DB 压死。正确做法是先量 p99 持有
 
 ## §十三 闭卷自测（先自己答，再展开）
 
-<details><summary>1. `Session(engine)` 这一行执行完，事务开了吗？连接借了吗？</summary>
+> **用法**：下面 10 题先**闭卷口答**（能说出来才算懂），再点开对应答案核对。
+> 答不出 ≤2 题算读懂；≥4 题答不出就回 §零–§六 重走主线。
+
+**题目清单**：
+
+1. `Session(engine)` 这一行执行完，事务开了吗？连接借了吗？
+2. 只 `flush()` 没 `commit()`，然后进程被 kill，数据在吗？为什么？
+3. `session.close()` 会不会丢已经 commit 的数据？
+4. 为什么 `expire_on_commit=False` 之后还会出现 DetachedInstanceError？
+5. `create_all()` 会不会给已有表加字段？
+6. 依赖 `get_db` 的 `close()` 在 FastAPI 里到底什么时候执行？
+7. 为什么测试不要用 `sqlite:///:memory:`？
+8. 一条时间轴上说出四个刻度：Session() / 第一条 SQL / commit / close，各发生了什么？
+9. ORM 对象和 DTO（`KBRow`）有什么区别？为什么 repo 层只许把 DTO 交出去？
+10. 事务到底是什么？为什么它能"撤销"已经执行过的语句？
+
+---
+
+**答案**：
+
+<details><summary>答案 1</summary>
 
 都没。Session 是惰性的：第一条 SQL（或 flush）才借连接 + `BEGIN (implicit)`。
 实测 `in_transaction() == False`。
 </details>
 
-<details><summary>2. 只 `flush()` 没 `commit()`，然后进程被 kill，数据在吗？为什么？</summary>
+<details><summary>答案 2</summary>
 
 不在。flush 只是把 INSERT 发出去了，事务没提交，进程一死连接断开 → 数据库回滚未提交事务。
 锁在 flush 那一刻就加了，所以这段时间别的写事务会被阻塞。
 </details>
 
-<details><summary>3. `session.close()` 会不会丢已经 commit 的数据？</summary>
+<details><summary>答案 3</summary>
 
 不会。close 只对**未结束的事务**做 rollback；已提交的数据已经在库里。
 实测：commit 后 close，数据仍在。
 </details>
 
-<details><summary>4. 为什么 `expire_on_commit=False` 之后还会出现 DetachedInstanceError？</summary>
+<details><summary>答案 4</summary>
 
 因为还有另一半原因：**懒加载**。关系属性（如 `kb.docs`）如果没被加载过，session 关闭后再访问要发 SQL，
 而对象已 detached → 报错。`expire_on_commit` 只管"已加载的属性是否作废"。
 </details>
 
-<details><summary>5. `create_all()` 会不会给已有表加字段？</summary>
+<details><summary>答案 5</summary>
 
 不会。它只对"库里不存在的表"发 `CREATE TABLE`（前面会先 `PRAGMA table_info` 查一下）。
 加字段/改类型必须用 Alembic 迁移。这是"我明明加了字段为什么报 no such column"的根因。
 </details>
 
-<details><summary>6. 依赖 `get_db` 的 `close()` 在 FastAPI 里到底什么时候执行？</summary>
+<details><summary>答案 6</summary>
 
 默认（`scope="request"`）在**响应生成之后 + 后台任务执行之后**。实测顺序：
 中间件进入 → 依赖开始 → handler → 中间件拿到响应 → 后台任务 → 依赖收尾。
 `scope="function"` 会提前到 handler 结束时、响应发出前。
 </details>
 
-<details><summary>7. 为什么测试不要用 `sqlite:///:memory:`？</summary>
+<details><summary>答案 7</summary>
 
 每条新连接都会得到一个**全新的空内存库**。`create_all` 在连接 A 上建的表，连接 B 看不见 →
 表不存在。要凑合用必须配 `StaticPool` + `check_same_thread=False` 强制共用一条连接。
 用 `tmp_path` 造临时文件库最省事。
 </details>
 
-<details><summary>8. 一条时间轴上说出四个刻度：Session() / 第一条 SQL / commit / close，各发生了什么？</summary>
+<details><summary>答案 8</summary>
 
 见 §零 的四行表。答不全就回去看——这是本篇的主线，也是明天 D2 的前提。
 </details>
 
-<details><summary>9. ORM 对象和 DTO（`KBRow`）有什么区别？为什么 repo 层只许把 DTO 交出去？</summary>
+<details><summary>答案 9</summary>
 
 ORM 对象（`KB` 实例）**绑在 session 上**，它的属性可能"没加载"或"已过期"，一访问就要发 SQL，
 session 一关就报 `DetachedInstanceError`，还带着一堆数据库细节（连接、脏状态）。
@@ -978,11 +1181,12 @@ DTO（`KBRow` 这个 TypedDict）是**纯数据**，跟数据库没关系，sess
 这既是分层（W3）的兑现，也是防 §五 那类炸的具体手段。
 </details>
 
-<details><summary>10. 事务到底是什么？为什么它能"撤销"已经执行过的语句？</summary>
+<details><summary>答案 10</summary>
 
 事务是"一组要么全成功、要么全失败的操作"。它能撤销**不是**因为把 SQL 反着跑一遍，
 而是因为数据库**先写日志再改数据**（undo 日志记录旧值），回滚时按日志把数据还原。
 代价是每次写都要额外写日志——所以事务不是免费的，长事务会让日志膨胀、拖慢别人（D4 会实测）。
+</details>
 
 ---
 
