@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
 from kb_service.repositories.base import store
+from kb_service.repositories.models import Document
 from kb_service.repositories.rows import DocRow
 from kb_service.schemas.doc import DocCreate
 
@@ -10,29 +14,54 @@ from kb_service.schemas.doc import DocCreate
 class DocRepository:
     """文档数据访问层。W7 TODO：换成 SQLAlchemy。"""
 
+    def __init__(self, session: Session | None = None) -> None:
+        self.session = session
+
     def create(self, kb_id: UUID, data: DocCreate, *, status: str = "pending") -> DocRow:
-        doc_id = store.new_id()
-        now = store.now()
-        row: DocRow = {
-            "id": doc_id,
-            "kb_id": kb_id,
-            "title": data.title,
-            "content": data.content,
-            "status": status,  # W11 起由 Celery 任务更新为 processing/ready/failed
-            "chunk_count": 0,
-            "created_at": now,
-            "updated_at": now,
-        }
-        store.docs[doc_id] = row
-        return row
+        if self.session is None:
+            doc_id = store.new_id()
+            now = store.now()
+            row: DocRow = {
+                "id": doc_id,
+                "kb_id": kb_id,
+                "title": data.title,
+                "content": data.content,
+                "status": status,  # W11 起由 Celery 任务更新为 processing/ready/failed
+                "chunk_count": 0,
+                "created_at": now,
+                "updated_at": now,
+            }
+            store.docs[doc_id] = row
+            return row
+        obj = Document(
+            kb_id=kb_id,
+            title=data.title,
+            status=status,
+        )
+        self.session.add(obj)
+        self.session.flush()
+        return obj.to_row()
 
     def get(self, doc_id: UUID) -> DocRow | None:
         return store.docs.get(doc_id)
 
     def list_by_kb(self, kb_id: UUID, offset: int, limit: int) -> tuple[list[DocRow], int]:
-        rows = [r for r in store.docs.values() if r["kb_id"] == kb_id]
-        rows.sort(key=lambda r: r["created_at"], reverse=True)
-        return rows[offset : offset + limit], len(rows)
+        if self.session is None:
+            rows = [r for r in store.docs.values() if r["kb_id"] == kb_id]
+            rows.sort(key=lambda r: r["created_at"], reverse=True)
+            return rows[offset : offset + limit], len(rows)
+
+        page = self.session.scalars(
+            select(Document)
+            .where(Document.kb_id == kb_id)
+            .order_by(Document.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        total = self.session.scalar(
+            select(func.count()).select_from(Document).where(Document.kb_id == kb_id)
+        )
+        return [d.to_row() for d in page], total or 0
 
     def delete(self, doc_id: UUID) -> bool:
         return store.docs.pop(doc_id, None) is not None

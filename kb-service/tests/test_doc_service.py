@@ -30,6 +30,7 @@ class SpyDocRepo(DocRepository):
     """
 
     def __init__(self) -> None:
+        super().__init__()
         self.offsets: list[int] = []
 
     def list_by_kb(self, kb_id: UUID, offset: int, limit: int) -> tuple[list[DocRow], int]:
