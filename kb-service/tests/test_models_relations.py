@@ -1,5 +1,6 @@
 """D2：关系 / 级联 / 外键 / N+1 四条回归。"""
 
+import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -20,7 +21,7 @@ def engine(tmp_path: Path) -> Iterator[Engine]:
     eng = create_engine(f"sqlite:///{tmp_path / 't.db'}")
 
     @event.listens_for(eng, "connect")
-    def _fk_on(dbapi_conn, _record):
+    def _fk_on(dbapi_conn: sqlite3.Connection, _record: object) -> None:
         cur = dbapi_conn.cursor()
         cur.execute("PRAGMA foreign_keys=ON")
         cur.close()
@@ -80,7 +81,7 @@ def test_list_by_kb_uses_two_sql(engine: Engine) -> None:
     sqls: list[str] = []
 
     @event.listens_for(engine, "before_cursor_execute")
-    def _rec(conn, cursor, statement, parameters, context, executemany):
+    def _rec(_conn: object, _cursor: object, statement: str, *_args: object) -> None:
         sqls.append(statement)
 
     with Session(engine) as s2:
