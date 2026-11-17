@@ -44,3 +44,9 @@ scratch/
 
 # ---------- PyCharm 运行配置（.run/ 要提交，.idea/ 已忽略） ----------
 kbs.json
+
+# ---------- 内容创作支线（插画素材是二进制大文件，不进仓库；脚本 md 照常提交） ----------
+content/**/*.png
+content/**/*.jpg
+content/**/*.mp4
+content/**/*.m4a
