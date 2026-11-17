@@ -4,8 +4,10 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
+from sqlalchemy import CursorResult, update
 from sqlalchemy.orm import Session
 
+from kb_service.core.exceptions import NotFoundError
 from kb_service.repositories.base import store
 from kb_service.repositories.models import KnowledgeBase
 from kb_service.repositories.rows import KBRow
@@ -78,6 +80,19 @@ class KBRepository:
         return store.kbs.pop(kb_id, None) is not None
 
     def incr_doc_count(self, kb_id: UUID, delta: int) -> None:
-        if row := store.kbs.get(kb_id):
-            row["doc_count"] = max(0, row["doc_count"] + delta)
-            row["updated_at"] = store.now()
+        if self.session is None:
+            if row := store.kbs.get(kb_id):
+                row["doc_count"] = max(0, row["doc_count"] + delta)
+                row["updated_at"] = store.now()
+
+        else:
+            """原子自增,kb 不存在抛 NotFoundError。"""
+            stmt = (
+                update(KnowledgeBase)
+                .where(KnowledgeBase.id == kb_id)
+                .values(doc_count=KnowledgeBase.doc_count + delta)
+            )
+            result = cast("CursorResult[Any]", self.session.execute(stmt))
+            if result.rowcount == 0:
+                raise NotFoundError(f"kb {kb_id} not found")
+            self.session.flush()
