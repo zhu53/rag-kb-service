@@ -10,6 +10,7 @@ from typing import NamedTuple
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.orm import Session
 
 from kb_service.core.exceptions import ForbiddenError, NotFoundError
 from kb_service.repositories.doc_repo import DocRepository
@@ -29,8 +30,8 @@ class SpyDocRepo(DocRepository):
     断言"传给仓储的 offset 是多少"，与排序无关，任何平台都成立。
     """
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, session: Session) -> None:
+        super().__init__(session)
         self.offsets: list[int] = []
 
     def list_by_kb(self, kb_id: UUID, offset: int, limit: int) -> tuple[list[DocRow], int]:
@@ -52,11 +53,12 @@ def owner() -> UUID:
 
 
 @pytest.fixture
-def world(owner: UUID) -> World:
-    kb_repo = KBRepository()
-    doc_repo = SpyDocRepo()
+def world(owner: UUID, db: Session) -> World:
+    kb_repo = KBRepository(db)
+    doc_repo = SpyDocRepo(db)
     kb = kb_repo.create(owner, KBCreate(name="知识库"))
-    return World(kb_repo, doc_repo, kb["id"], owner, DocService(repo=doc_repo, kb_repo=kb_repo))
+    svc = DocService(repo=doc_repo, kb_repo=kb_repo, session=db)
+    return World(kb_repo, doc_repo, kb["id"], owner, svc)
 
 
 def _add_docs(world: World, count: int) -> None:

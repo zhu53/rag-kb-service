@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy.orm import Session
+
 from kb_service.core.exceptions import ForbiddenError, NotFoundError
-from kb_service.repositories.kb_repo import KBRepository
 from kb_service.repositories.protocols import KBRepo
 from kb_service.repositories.rows import KBRow
 from kb_service.schemas.kb import KBCreate, KBOut, KBUpdate, Page
@@ -16,11 +17,19 @@ class KBService:
     这是"分层"在面试中最容易讲清楚的价值点。
     """
 
-    def __init__(self, repo: KBRepo | None = None) -> None:
-        self.repo = repo or KBRepository()
+    def __init__(self, repo: KBRepo, session: Session | None = None) -> None:
+        self.repo = repo
+        self._session = session
+
+    def _commit(self) -> None:
+        """一次业务动作 = 一次 commit"""
+        if self._session is None:
+            return
+        self._session.commit()
 
     def create(self, owner_id: UUID, data: KBCreate) -> KBOut:
         row = self.repo.create(owner_id, data)
+        self._commit()
         return KBOut.model_validate(row)
 
     def get_or_403(self, kb_id: UUID, user_id: UUID) -> KBRow:
@@ -47,11 +56,13 @@ class KBService:
         row = self.repo.update(kb_id, data)
         if row is None:
             raise NotFoundError("知识库不存在")
+        self._commit()
         return KBOut.model_validate(row)
 
     def delete(self, kb_id: UUID, user_id: UUID) -> None:
         self.get_or_403(kb_id, user_id)
         self.repo.delete(kb_id)
+        self._commit()
 
     def count_owned(self, user_id: UUID) -> int:
         """统计当前用户拥有的知识库数量。"""

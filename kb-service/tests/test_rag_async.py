@@ -9,11 +9,15 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from tests.fakes import make_kb_row
+from sqlalchemy.orm import Session
+from tests.fakes import FakeKBRepo, make_kb_row
 
 from kb_service.main import create_app
-from kb_service.repositories.base import store
+from kb_service.repositories.doc_repo import DocRepository
+from kb_service.repositories.kb_repo import KBRepository
 from kb_service.repositories.rows import DocRow, KBRow
+from kb_service.schemas.doc import DocCreate
+from kb_service.schemas.kb import KBCreate
 from kb_service.services.rag_service import RagService
 
 USER_ID = UUID("22222222-2222-4222-8222-222222222222")
@@ -61,7 +65,7 @@ async def async_client() -> AsyncIterator[AsyncClient]:
 
 
 async def test_answer_no_sources(monkeypatch: pytest.MonkeyPatch) -> None:
-    svc = RagService(doc_repo=FakeDocRepo())
+    svc = RagService(doc_repo=FakeDocRepo(), kb_repo=FakeKBRepo())
     monkeypatch.setattr(svc, "kb_service", FakeKBService())
 
     result = await svc.answer(uuid4(), USER_ID, "没有命中任何文档的问题", 3)
@@ -73,7 +77,7 @@ async def test_answer_no_sources(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_answer_with_sources(monkeypatch: pytest.MonkeyPatch) -> None:
     kb_id = uuid4()
     repo = FakeDocRepo([_doc_row(kb_id, "RAG 是检索增强生成，先检索再生成。")])
-    svc = RagService(doc_repo=repo)
+    svc = RagService(doc_repo=repo, kb_repo=FakeKBRepo())
     monkeypatch.setattr(svc, "kb_service", FakeKBService())
 
     result = await svc.answer(kb_id, USER_ID, "什么是 RAG？", 3)
@@ -85,7 +89,7 @@ async def test_answer_with_sources(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_answer_stream_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
     kb_id = uuid4()
     repo = FakeDocRepo([_doc_row(kb_id, "RAG 是检索增强生成，先检索再生成。")])
-    svc = RagService(doc_repo=repo)
+    svc = RagService(doc_repo=repo, kb_repo=FakeKBRepo())
     monkeypatch.setattr(svc, "kb_service", FakeKBService())
 
     chunks = [c async for c in svc.answer_stream(kb_id, USER_ID, "什么是 RAG？", 3)]
@@ -97,57 +101,39 @@ async def test_answer_stream_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_chat_sse_via_async_client(
     app: FastAPI,
+    db: Session,
     override_current_user_id: UUID,
 ) -> None:
-    """集成：先在 store 里种一个 kb + 一篇文档，再走真实路由。"""
+    """集成：先在库里种一个 kb + 一篇文档，再走真实路由。
 
-    kb_id = uuid4()
-    doc_id = uuid4()
-    now = datetime.now(UTC)
+    和上一版的关键差别：数据种在 **db**（与 get_db 的 override 同一个 session），
+    不是种在内存 store。种错地方的话，路由查库什么都查不到，测试会静默变成
+    测"空知识库"——那种失败很难看出是数据没进去还是检索坏了。
+    """
 
-    # 按 KBOut / doc row 的字段造数据；owner 必须是"当前登录用户"，否则路由里 get_or_403 会拒
-    store.kbs[kb_id] = {
-        "id": kb_id,
-        "owner_id": override_current_user_id,
-        "name": "测试库",
-        "description": "",
-        "doc_count": 1,
-        "created_at": now,
-        "updated_at": now,
-    }
+    kb_id = KBRepository(db).create(override_current_user_id, KBCreate(name="测试库"))["id"]
+    DocRepository(db).create(
+        kb_id, DocCreate(title="测试文档", content="RAG 是检索增强生成，先检索再生成。")
+    )
+    db.commit()
 
-    store.docs[doc_id] = {
-        "id": doc_id,
-        "kb_id": kb_id,
-        "title": "测试文档",
-        "content": "RAG 是检索增强生成，先检索再生成。",
-        "status": "ready",
-        "chunk_count": 1,
-        "created_at": now,
-        "updated_at": now,
-    }
+    transport = ASGITransport(app=app)
+    async with (
+        AsyncClient(transport=transport, base_url="http://test") as client,
+        client.stream(
+            "POST",
+            "/api/v1/chat",
+            json={
+                "kb_id": str(kb_id),
+                "question": "什么是 RAG？",
+            },
+        ) as response,
+    ):
+        lines = [line async for line in response.aiter_lines()]
 
-    try:
-        transport = ASGITransport(app=app)
-        async with (
-            AsyncClient(transport=transport, base_url="http://test") as client,
-            client.stream(
-                "POST",
-                "/api/v1/chat",
-                json={
-                    "kb_id": str(kb_id),
-                    "question": "什么是 RAG？",
-                },
-            ) as response,
-        ):
-            lines = [line async for line in response.aiter_lines()]
-
-        assert lines
-        assert any("data: " in line for line in lines)
-        assert lines[-2] == "data: [DONE]"
-    finally:
-        store.kbs.pop(kb_id, None)
-        store.docs.pop(doc_id, None)
+    assert lines
+    assert any("data: " in line for line in lines)
+    assert lines[-2] == "data: [DONE]"
 
 
 async def test_chat_requires_auth(async_client: AsyncClient) -> None:

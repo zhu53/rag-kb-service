@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from kb_service.api.v1 import health
 from kb_service.api.v1.router import api_router
@@ -60,6 +63,20 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router, tags=[constants.TAG_HEALTH])
     app.include_router(api_router)
+
+    # ---------- dev 专用路由（演示 token 签发）----------
+    # 不进 prod：谁都能拿 token 的端点不能出现在公网应用上。
+    if settings.env != "prod":
+        from kb_service.api.v1 import dev
+
+        app.include_router(dev.router, prefix="/api/v1", tags=["dev"])
+
+    # ---------- 演示页面 ----------
+    # 挂在 "/" 且必须放在所有 API 路由之后：Starlette 按注册顺序匹配，
+    # 先注册的 /api/v1/* 先命中，StaticFiles 兜住剩下的（浏览器直接访问 /）。
+    static_dir = Path(__file__).resolve().parents[2] / "static"
+    if static_dir.is_dir():
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
     return app
 
 

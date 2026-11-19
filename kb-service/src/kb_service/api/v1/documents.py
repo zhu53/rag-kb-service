@@ -4,8 +4,11 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, status
+from sqlalchemy.orm import Session
 
 from kb_service.api.deps import get_current_user_id
+from kb_service.core.db import get_db
+from kb_service.repositories.doc_repo import DocRepository
 from kb_service.schemas.common import PageParams
 from kb_service.schemas.doc import DocCreate, DocOut
 from kb_service.schemas.kb import Page
@@ -21,8 +24,9 @@ async def create_doc(
     body: DocCreate,
     background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user_id),
+    session: Session = Depends(get_db),
 ) -> DocOut:
-    doc = DocService().create(kb_id, user_id, body)
+    doc = DocService(DocRepository(session), session=session).create(kb_id, user_id, body)
     background_tasks.add_task(run_index, doc.id, body.content)
     return doc
 
@@ -32,8 +36,11 @@ async def list_docs(
     kb_id: UUID,
     params: Annotated[PageParams, Depends()],
     user_id: UUID = Depends(get_current_user_id),
+    session: Session = Depends(get_db),
 ) -> Page[DocOut]:
-    return DocService().list(kb_id, user_id, params.page, params.size)
+    return DocService(DocRepository(session), session=session).list(
+        kb_id, user_id, params.page, params.size
+    )
 
 
 @router.get("/{kb_id}/documents/{doc_id}", summary="文档详情")
@@ -41,8 +48,9 @@ async def get_doc(
     kb_id: UUID,
     doc_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
+    session: Session = Depends(get_db),
 ) -> DocOut:
-    return DocService().get(doc_id, user_id)
+    return DocService(DocRepository(session), session=session).get(doc_id, user_id)
 
 
 @router.delete(
@@ -54,5 +62,6 @@ async def delete_doc(
     kb_id: UUID,
     doc_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
+    session: Session = Depends(get_db),
 ) -> None:
-    DocService().delete(doc_id, user_id)
+    DocService(DocRepository(session), session=session).delete(doc_id, user_id)

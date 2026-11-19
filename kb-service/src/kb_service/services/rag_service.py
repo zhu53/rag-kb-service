@@ -3,8 +3,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from uuid import UUID
 
+from sqlalchemy.orm import Session
+
 from kb_service.repositories.doc_repo import DocRepository
-from kb_service.repositories.protocols import DocReader
+from kb_service.repositories.kb_repo import KBRepository
+from kb_service.repositories.protocols import DocReader, KBRepo
 from kb_service.schemas.chat import ChatResponse, ChatSource
 from kb_service.services.kb_service import KBService
 
@@ -20,9 +23,22 @@ class RagService:
       W16: 评测脚本对比改动前后的 Recall@K / 忠实度
     """
 
-    def __init__(self, doc_repo: DocReader | None = None) -> None:
-        self.doc_repo = doc_repo or DocRepository()
-        self.kb_service = KBService()
+    def __init__(
+        self,
+        doc_repo: DocReader | None = None,
+        kb_repo: KBRepo | None = None,
+        session: Session | None = None,
+    ) -> None:
+        if doc_repo is None:
+            if session is None:
+                raise ValueError("RagService 需要 doc_repo 或 session 之一")
+            doc_repo = DocRepository(session)
+        if kb_repo is None:
+            if session is None:
+                raise ValueError("RagService 需要 kb_repo 或 session 之一")
+            kb_repo = KBRepository(session)
+        self.doc_repo = doc_repo
+        self.kb_service = KBService(kb_repo, session=session)
         self._llm: object | None = None
 
     def _retrieve(self, kb_id: UUID, question: str, top_k: int) -> list[ChatSource]:

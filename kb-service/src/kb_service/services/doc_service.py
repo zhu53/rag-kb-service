@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy.orm import Session
+
 from kb_service.core.exceptions import NotFoundError
 from kb_service.repositories.doc_repo import DocRepository
 from kb_service.repositories.kb_repo import KBRepository
@@ -16,10 +18,29 @@ class DocService:
     def __init__(
         self,
         repo: DocRepo | None = None,
+        session: Session | None = None,
         kb_repo: KBRepo | None = None,
     ) -> None:
-        self.repo = repo or DocRepository()
-        self.kb_service = KBService(kb_repo or KBRepository())
+        # "repo 与 session 至少给一个"——这个检查不是防御性编程的洁癖：
+        # 漏传的后果是 session=None 一路往下传，最后在调用处才炸，
+        # 报错点离病因隔了三层。在入口炸，堆栈第一行就是答案。
+        if repo is None:
+            if session is None:
+                raise ValueError("DocService 需要 repo 或 session 之一")
+            repo = DocRepository(session)
+        if kb_repo is None:
+            if session is None:
+                raise ValueError("DocService 需要 kb_repo 或 session 之一")
+            kb_repo = KBRepository(session)
+        self._session = session
+        self.repo = repo
+        self.kb_service = KBService(kb_repo, session=session)
+
+    def _commit(self) -> None:
+        """一次业务动作 = 一次 commit"""
+        if self._session is None:
+            return
+        self._session.commit()
 
     def create(self, kb_id: UUID, user_id: UUID, data: DocCreate) -> DocOut:
         self.kb_service.get_or_403(kb_id, user_id)
@@ -27,9 +48,10 @@ class DocService:
         self.kb_service.repo.incr_doc_count(kb_id, 1)
 
         # W11 TODO：这里改成 submit_parse_task.delay(doc_id)，把同步解析改成异步。
-        self._parse_sync(row)
-
-        return DocOut.model_validate(row)
+        n = self._parse_sync(row)
+        self._commit()
+        fresh: DocRow = {**row, "status": "ready", "chunk_count": n}
+        return DocOut.model_validate(fresh)
 
     def list(self, kb_id: UUID, user_id: UUID, page: int, size: int) -> Page[DocOut]:
         self.kb_service.get_or_403(kb_id, user_id)
@@ -56,12 +78,15 @@ class DocService:
         self.kb_service.get_or_403(row["kb_id"], user_id)
         self.repo.delete(doc_id)
         self.kb_service.repo.incr_doc_count(row["kb_id"], -1)
+        self._commit()
 
-    def _parse_sync(self, row: DocRow) -> None:
-        """同步解析占位实现。W12 TODO：换成 split_text + embedding + pgvector 写入。"""
+    def _parse_sync(self, row: DocRow) -> int:
+        """同步解析：切块 → 写 chunks 表 → 标 ready。返回切块数。"""
         text: str = row["content"]
-        chunks = split_text(text, chunk_size=400, overlap=50)
-        self.repo.update_status(row["id"], "ready", chunk_count=len(chunks))
+        pieces = split_text(text, chunk_size=400, overlap=50)
+        self.repo.add_chunks(row["id"], pieces)  # ← 新增这行
+        self.repo.update_status(row["id"], "ready", chunk_count=len(pieces))
+        return len(pieces)  # ← 返回切块数
 
 
 def split_text(text: str, *, chunk_size: int = 400, overlap: int = 50) -> list[str]:

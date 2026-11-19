@@ -4,11 +4,10 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, update
+from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.orm import Session
 
 from kb_service.core.exceptions import NotFoundError
-from kb_service.repositories.base import store
 from kb_service.repositories.models import KnowledgeBase
 from kb_service.repositories.rows import KBRow
 from kb_service.schemas.kb import KBCreate, KBUpdate
@@ -21,26 +20,10 @@ class KBRepository:
     传入 session 时 `create` 走数据库。D2 会把其余方法全部切过去，那时 session 变必传。
     """
 
-    def __init__(self, session: Session | None = None) -> None:
+    def __init__(self, session: Session) -> None:
         self.session = session
 
     def create(self, owner_id: UUID, data: KBCreate) -> KBRow:
-        if self.session is None:
-            # ---- 过渡期分支：内存实现，等 D2 之后删掉 ----
-            kb_id = store.new_id()
-            now = store.now()
-            row: KBRow = {
-                "id": kb_id,
-                "owner_id": owner_id,
-                "name": data.name,
-                "description": data.description,
-                "doc_count": 0,
-                "created_at": now,
-                "updated_at": now,
-            }
-            store.kbs[kb_id] = row
-            return row
-
         # ---- D1 新增：真正写库 ----
         obj = KnowledgeBase(
             owner_id=owner_id,
@@ -56,43 +39,61 @@ class KBRepository:
         return obj.to_row()
 
     def get(self, kb_id: UUID) -> KBRow | None:
-        return store.kbs.get(kb_id)
+        obj = self.session.get(KnowledgeBase, kb_id)  # 主键查，最短路径
+        return obj.to_row() if obj else None
 
     def list_by_owner(self, owner_id: UUID, offset: int, limit: int) -> tuple[list[KBRow], int]:
-        rows = [r for r in store.kbs.values() if r["owner_id"] == owner_id]
-        rows.sort(key=lambda r: r["created_at"], reverse=True)
-        return rows[offset : offset + limit], len(rows)
+        stmt = (
+            select(KnowledgeBase)
+            .where(KnowledgeBase.owner_id == owner_id)
+            .order_by(KnowledgeBase.created_at.desc())
+        )
+        page_stmt = stmt.offset(offset).limit(limit)
+        result = self.session.execute(page_stmt)
+        rows = [row.to_row() for row in result.scalars().all()]
+        count_stmt = (
+            select(func.count())
+            .select_from(KnowledgeBase)
+            .where(KnowledgeBase.owner_id == owner_id)
+        )
+        total = self.session.scalar(count_stmt)
+        return rows, (total or 0)
 
     def count_by_owner(self, owner_id: UUID) -> int:
         """统计该主人名下知识库数量。W7改成 SELECT COUNT(*)."""
-        return sum(1 for r in store.kbs.values() if r["owner_id"] == owner_id)
+        stmt = (
+            select(func.count())
+            .select_from(KnowledgeBase)
+            .where(KnowledgeBase.owner_id == owner_id)
+        )
+        count = self.session.execute(stmt).scalar()
+        return count or 0
 
     def update(self, kb_id: UUID, data: KBUpdate) -> KBRow | None:
-        row = store.kbs.get(kb_id)
-        if row is None:
+        obj = self.session.get(KnowledgeBase, kb_id)
+        if obj is None:
             return None
         payload = data.model_dump(exclude_unset=True)
-        cast("dict[str, Any]", row).update(payload)
-        row["updated_at"] = store.now()
-        return row
+        for k, v in payload.items():
+            if v is not None:
+                setattr(obj, k, v)
+        return obj.to_row()
 
     def delete(self, kb_id: UUID) -> bool:
-        return store.kbs.pop(kb_id, None) is not None
+        obj = self.session.get(KnowledgeBase, kb_id)
+        if obj is None:
+            return False
+        self.session.delete(obj)
+        return True
 
     def incr_doc_count(self, kb_id: UUID, delta: int) -> None:
-        if self.session is None:
-            if row := store.kbs.get(kb_id):
-                row["doc_count"] = max(0, row["doc_count"] + delta)
-                row["updated_at"] = store.now()
-
-        else:
-            """原子自增,kb 不存在抛 NotFoundError。"""
-            stmt = (
-                update(KnowledgeBase)
-                .where(KnowledgeBase.id == kb_id)
-                .values(doc_count=KnowledgeBase.doc_count + delta)
-            )
-            result = cast("CursorResult[Any]", self.session.execute(stmt))
-            if result.rowcount == 0:
-                raise NotFoundError(f"kb {kb_id} not found")
-            self.session.flush()
+        """原子自增,kb 不存在抛 NotFoundError。"""
+        stmt = (
+            update(KnowledgeBase)
+            .where(KnowledgeBase.id == kb_id)
+            .values(doc_count=KnowledgeBase.doc_count + delta)
+        )
+        result = cast("CursorResult[Any]", self.session.execute(stmt))
+        if result.rowcount == 0:
+            raise NotFoundError(f"kb {kb_id} not found")
+        self.session.flush()

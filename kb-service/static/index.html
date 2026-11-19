@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kb-service 演示台</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #e2e5ea;
+    --text: #1f2933; --muted: #6b7480; --accent: #2563eb;
+    --ok: #16a34a; --warn: #d97706; --err: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 16px; margin: 0; }
+  header .spacer { flex: 1; }
+  .tag { font-size: 12px; color: var(--muted); }
+  .tag b { color: var(--ok); font-weight: 600; }
+  input, textarea, button, select {
+    font: inherit; border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 10px; background: #fff; color: var(--text);
+  }
+  input:focus, textarea:focus { outline: 1px solid var(--accent); }
+  button { cursor: pointer; background: var(--accent); color: #fff; border: none; }
+  button.ghost { background: #eef1f5; color: var(--text); }
+  button.danger { background: #fee2e2; color: var(--err); padding: 2px 8px; font-size: 12px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  main {
+    display: grid; grid-template-columns: 280px 1fr 1fr; gap: 14px;
+    padding: 14px 20px; max-width: 1400px; margin: 0 auto;
+  }
+  .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px;
+  }
+  .card h2 { font-size: 14px; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
+  .row { display: flex; gap: 8px; }
+  .row > input, .row > textarea { flex: 1; min-width: 0; }
+  textarea { resize: vertical; }
+  ul.list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 260px; overflow: auto; }
+  ul.list li {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 9px; border-radius: 6px; cursor: pointer; border: 1px solid transparent;
+  }
+  ul.list li:hover { background: #f0f4ff; }
+  ul.list li.active { background: #e8efff; border-color: #c3d4fb; }
+  ul.list li .meta { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  ul.list li .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { font-size: 11px; padding: 1px 7px; border-radius: 99px; background: #eef1f5; color: var(--muted); }
+  .badge.ready { background: #dcfce7; color: var(--ok); }
+  .badge.pending, .badge.processing { background: #fef3c7; color: var(--warn); }
+  .badge.failed { background: #fee2e2; color: var(--err); }
+  .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+  #chatLog {
+    display: flex; flex-direction: column; gap: 10px;
+    max-height: 380px; overflow: auto; margin-bottom: 10px;
+  }
+  .bubble { border-radius: 8px; padding: 9px 12px; max-width: 92%; white-space: pre-wrap; word-break: break-word; }
+  .bubble.q { align-self: flex-end; background: var(--accent); color: #fff; }
+  .bubble.a { align-self: flex-start; background: #f0f1f3; }
+  .src { font-size: 12px; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 8px; margin-top: 6px; }
+  #toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); display: none;
+    background: #111827; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px; }
+  #toast.err { background: var(--err); }
+</style>
+</head>
+<body>
+<header>
+  <h1>kb-service 演示台</h1>
+  <span class="tag" id="authTag">未登录</span>
+  <div class="spacer"></div>
+  <input id="userIdInput" placeholder="用户ID（留空=随机新用户）" style="width:280px">
+  <button id="loginBtn">签发 token</button>
+</header>
+
+<main>
+  <!-- 左：知识库 -->
+  <div class="col">
+    <div class="card">
+      <h2>① 知识库</h2>
+      <div class="row">
+        <input id="kbName" placeholder="名称">
+        <button id="createKbBtn">建库</button>
+      </div>
+      <input id="kbDesc" placeholder="描述（可空）" style="width:100%;margin-top:8px">
+      <ul class="list" id="kbList"></ul>
+      <div class="empty" id="kbEmpty">还没有知识库</div>
+    </div>
+  </div>
+
+  <!-- 中：文档 -->
+  <div class="col">
+    <div class="card">
+      <h2>② 文档 <span id="docKbName" class="tag"></span></h2>
+      <div class="row">
+        <input id="docTitle" placeholder="标题">
+      </div>
+      <textarea id="docContent" rows="4" placeholder="正文（≥1200 字可看到切块效果）" style="width:100%;margin-top:8px"></textarea>
+      <div class="row" style="margin-top:8px">
+        <span class="tag" id="docLen">0 字</span>
+        <div class="spacer" style="flex:1"></div>
+        <button id="uploadBtn">上传</button>
+      </div>
+      <ul class="list" id="docList" style="max-height:200px"></ul>
+      <div class="empty" id="docEmpty">先在左侧选中一个知识库</div>
+    </div>
+  </div>
+
+  <!-- 右：问答 -->
+  <div class="col">
+    <div class="card">
+      <h2>③ 提问</h2>
+      <div id="chatLog"><div class="empty">提问会先检索 chunks，把命中的片段喂给 LLM</div></div>
+      <div class="row">
+        <input id="question" placeholder="问点什么…">
+        <button id="askBtn">发送</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let token = null;
+let currentKb = null;   // 当前选中的知识库 id
+let kbs = [];           // 缓存，提问按钮要用
+
+// ---------- 基础设施 ----------
+function toast(msg, isErr = false) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = isErr ? "err" : "";
+  t.style.display = "block";
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => (t.style.display = "none"), 2600);
+}
+
+async function api(method, path, body) {
+  const resp = await fetch(path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: "Bearer " + token } : {}),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    let msg = "HTTP " + resp.status;
+    try {
+      const j = await resp.json();
+      if (j.message) msg = j.message;        // 统一错误响应 {code,message,data}
+    } catch (_) { /* 204 或非 JSON */ }
+    if (resp.status === 401) { setAuth(null); msg = "未登录或凭证过期，请重新签发 token"; }
+    throw new Error(msg);
+  }
+  return resp.status === 204 ? null : resp.json();
+}
+
+// 注意三种返回形状：
+//   建库 → ApiResponse{code,message,data}；列表 → Page{items,...}；文档/问答 → 本体
+function unwrap(j) { return j && j.data !== undefined && j.items === undefined ? j.data : j; }
+
+function setAuth(tk) {
+  token = tk;
+  $("authTag").innerHTML = tk ? "已登录 <b>●</b>" : "未登录";
+}
+
+// ---------- 登录 ----------
+$("loginBtn").onclick = async () => {
+  const uid = $("userIdInput").value.trim();
+  const body = uid ? { user_id: uid } : {};
+  try {
+    const j = await api("POST", "/api/v1/dev/token", body);
+    setAuth(j.access_token);
+    $("userIdInput").value = j.user_id;
+    toast("token 已签发，user_id = " + j.user_id);
+    loadKbs();
+  } catch (e) { toast(e.message, true); }
+};
+
+// ---------- 知识库 ----------
+async function loadKbs() {
+  try {
+    const page = unwrap(await api("GET", "/api/v1/kbs?page=1&size=50"));
+    kbs = page.items;
+    renderKbs();
+  } catch (e) { toast(e.message, true); }
+}
+
+function renderKbs() {
+  const ul = $("kbList");
+  $("kbEmpty").style.display = kbs.length ? "none" : "block";
+  ul.innerHTML = "";
+  for (const kb of kbs) {
+    const li = document.createElement("li");
+    li.className = kb.id === currentKb ? "active" : "";
+    const name = document.createElement("span");
+    name.className = "title";
+    name.textContent = kb.name;
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = kb.doc_count + " 篇";
+    const del = document.createElement("button");
+    del.className = "danger"; del.textContent = "删";
+    del.onclick = (ev) => { ev.stopPropagation(); removeKb(kb.id); };
+    li.append(name, meta, del);
+    li.onclick = () => selectKb(kb);
+    ul.append(li);
+  }
+}
+
+$("createKbBtn").onclick = async () => {
+  const name = $("kbName").value.trim();
+  if (!name) return toast("名称不能为空", true);
+  try {
+    await api("POST", "/api/v1/kbs", { kbName: name, description: $("kbDesc").value.trim() || null });
+    $("kbName").value = ""; $("kbDesc").value = "";
+    toast("知识库已创建（数据已在 MySQL 里）");
+    loadKbs();
+  } catch (e) { toast(e.message, true); }
+};
+
+async function removeKb(id) {
+  try {
+    await api("DELETE", "/api/v1/kbs/" + id);
+    if (currentKb === id) { currentKb = null; $("docList").innerHTML = ""; $("docEmpty").style.display = "block"; $("docKbName").textContent = ""; }
+    toast("已删除（FK CASCADE 带走了文档）");
+    loadKbs();
+  } catch (e) { toast(e.message, true); }
+}
+
+function selectKb(kb) {
+  currentKb = kb.id;
+  $("docKbName").textContent = "· " + kb.name;
+  renderKbs();
+  loadDocs();
+}
+
+// ---------- 文档 ----------
+async function loadDocs() {
+  if (!currentKb) return;
+  try {
+    const page = unwrap(await api("GET", "/api/v1/kbs/" + currentKb + "/documents?page=1&size=50"));
+    const docs = page.items;
+    $("docEmpty").style.display = docs.length ? "none" : "block";
+    const ul = $("docList");
+    ul.innerHTML = "";
+    for (const d of docs) {
+      const li = document.createElement("li");
+      const title = document.createElement("span");
+      title.className = "title"; title.textContent = d.title;
+      const badge = document.createElement("span");
+      badge.className = "badge " + d.status; badge.textContent = d.status + "·" + d.chunk_count + "块";
+      const del = document.createElement("button");
+      del.className = "danger"; del.textContent = "删";
+      del.onclick = async (ev) => {
+        ev.stopPropagation();
+        await api("DELETE", "/api/v1/kbs/" + currentKb + "/documents/" + d.id);
+        loadDocs(); loadKbs();
+      };
+      li.append(title, badge, del);
+      ul.append(li);
+    }
+  } catch (e) { toast(e.message, true); }
+}
+
+$("docContent").addEventListener("input", (e) => { $("docLen").textContent = e.target.value.length + " 字"; });
+
+$("uploadBtn").onclick = async () => {
+  if (!currentKb) return toast("先选中一个知识库", true);
+  const title = $("docTitle").value.trim();
+  const content = $("docContent").value;
+  if (!title || !content.trim()) return toast("标题和正文都不能为空", true);
+  $("uploadBtn").disabled = true;
+  try {
+    const doc = unwrap(await api("POST", "/api/v1/kbs/" + currentKb + "/documents", { title, content }));
+    toast("已入库：" + doc.status + "，切了 " + doc.chunk_count + " 块");
+    $("docTitle").value = ""; $("docContent").value = ""; $("docLen").textContent = "0 字";
+    loadDocs(); loadKbs();
+  } catch (e) { toast(e.message, true); }
+  $("uploadBtn").disabled = false;
+};
+
+// ---------- 问答 ----------
+$("askBtn").onclick = async () => {
+  if (!token) return toast("先签发 token", true);
+  if (!currentKb) return toast("先选中一个知识库", true);
+  const q = $("question").value.trim();
+  if (!q) return toast("问题不能为空", true);
+  const log = $("chatLog");
+  log.querySelector(".empty")?.remove();
+  const addBubble = (cls, text) => {
+    const b = document.createElement("div");
+    b.className = "bubble " + cls;
+    b.textContent = text;
+    log.append(b);
+    log.scrollTop = log.scrollHeight;
+    return b;
+  };
+  addBubble("q", q);
+  $("question").value = "";
+  const ab = addBubble("a", "思考中…");
+  try {
+    const r = await api("POST", "/api/v1/chat", { kb_id: currentKb, question: q, stream: false });
+    let html = r.answer || "(无答案)";
+    for (const s of r.sources || []) {
+      const d = document.createElement("div");
+      d.className = "src";
+      d.textContent = "来源·块" + s.chunk_index + "·得分" + s.score.toFixed(3) + "：" + s.snippet;
+      ab.append(d);
+    }
+    ab.firstChild.textContent = html;
+  } catch (e) { ab.textContent = "出错：" + e.message; }
+};
+
+// 首次进入：自动签发一个随机用户，减少演示摩擦
+window.addEventListener("DOMContentLoaded", () => $("loginBtn").click());
+</script>
+</body>
+</html>
