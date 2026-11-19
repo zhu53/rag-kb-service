@@ -18,3 +18,20 @@ import os
 
 # 仅测试用假密钥：满足 min_length=16 即可，不涉密，也不是生产凭证。
 os.environ.setdefault("SECRET_KEY", "test-secret-key-0123456789")
+
+# 测试默认不许碰真库（2026-11-19 事故后加）。
+#
+# 事故：`test_dev_token.py` 自己 `TestClient(create_app())`，绕过 conftest 打在
+# `app` fixture 上的 `dependency_overrides[get_db]`，于是走了真 `get_db`：
+#   本地 .env → MySQL kb_dev（有表）→ 200，绿；
+#   CI 没有 .env → 空 sqlite 文件 → no such table → 红。
+# 后果是「本地绿 ≠ CI 绿」，而且本地那条绿毫无信息量。
+#
+# 这里把 DATABASE_URL 钉成内存 sqlite（**赋值不是 setdefault**：.env 和环境变量
+# 都可能指向真库，测试要的是确定性，不是"碰运气继承"）。这样即使某条用例再次
+# 绕过 override，也会在本地立刻 `no such table` 炸出来，而不是偷偷写成 200。
+#
+# 唯一例外：真 MySQL 集成测试（tests/test_db_integration.py）要连真库，
+# 它自己用 KB_TEST_MYSQL=1 显式声明，这时保留真实 DATABASE_URL。
+if os.environ.get("KB_TEST_MYSQL") != "1":
+    os.environ["DATABASE_URL"] = "sqlite://"
