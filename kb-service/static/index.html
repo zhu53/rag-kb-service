@@ -3,138 +3,307 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>kb-service 演示台</title>
+<title>kb-service · 知识库演示台</title>
 <style>
   :root {
-    --bg: #f5f6f8; --panel: #ffffff; --line: #e2e5ea;
-    --text: #1f2933; --muted: #6b7480; --accent: #2563eb;
+    --bg: #f3f5f9; --panel: #ffffff; --line: #e4e8ef;
+    --text: #1c2433; --muted: #6b7688; --accent: #4f46e5; --accent-2: #6366f1;
     --ok: #16a34a; --warn: #d97706; --err: #dc2626;
+    --side: #10162b; --side-text: #cbd5e1;
+    --shadow: 0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
+    --radius: 12px;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.6 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    font: 14px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    display: grid; grid-template-rows: 56px 1fr;
   }
+  /* ---------- 顶栏 ---------- */
   header {
-    display: flex; align-items: center; gap: 16px;
-    padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 14px; padding: 0 18px;
+    background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: var(--shadow);
+    position: relative; z-index: 5;
   }
-  header h1 { font-size: 16px; margin: 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
+  .brand .logo {
+    width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--accent), #8b5cf6); color: #fff; font-size: 14px;
+  }
+  .brand small { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+    padding: 3px 10px; border-radius: 99px; background: #f1f4f9; color: var(--muted);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #9aa4b2; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px #dcfce7; }
+  .dot.off { background: var(--err); box-shadow: 0 0 0 3px #fee2e2; }
+  .userchip {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted);
+    background: #f1f4f9; padding: 4px 10px 4px 4px; border-radius: 99px; cursor: default;
+  }
+  .userchip .avatar {
+    width: 22px; height: 22px; border-radius: 50%; background: var(--accent);
+    color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700;
+  }
   header .spacer { flex: 1; }
-  .tag { font-size: 12px; color: var(--muted); }
-  .tag b { color: var(--ok); font-weight: 600; }
-  input, textarea, button, select {
-    font: inherit; border: 1px solid var(--line); border-radius: 6px;
-    padding: 6px 10px; background: #fff; color: var(--text);
+  button {
+    font: inherit; border: none; border-radius: 8px; padding: 7px 14px;
+    cursor: pointer; background: var(--accent); color: #fff; transition: filter .15s;
   }
-  input:focus, textarea:focus { outline: 1px solid var(--accent); }
-  button { cursor: pointer; background: var(--accent); color: #fff; border: none; }
-  button.ghost { background: #eef1f5; color: var(--text); }
-  button.danger { background: #fee2e2; color: var(--err); padding: 2px 8px; font-size: 12px; }
+  button:hover { filter: brightness(1.08); }
+  button.ghost { background: #eef1f6; color: var(--text); }
+  button.play {
+    background: linear-gradient(135deg, #059669, #10b981); padding: 7px 16px; font-weight: 600;
+  }
+  button.danger {
+    background: transparent; color: #94a3b8; padding: 2px 6px; font-size: 12px; border-radius: 6px;
+  }
+  button.danger:hover { background: #fee2e2; color: var(--err); }
   button:disabled { opacity: .5; cursor: not-allowed; }
+  input, textarea {
+    font: inherit; border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 10px; background: #fff; color: var(--text); width: 100%;
+  }
+  input:focus, textarea:focus { outline: 2px solid #c7d2fe; border-color: var(--accent-2); }
+  textarea { resize: vertical; }
+  /* ---------- 主体三区 ---------- */
   main {
-    display: grid; grid-template-columns: 280px 1fr 1fr; gap: 14px;
-    padding: 14px 20px; max-width: 1400px; margin: 0 auto;
+    display: grid; grid-template-columns: 264px minmax(0,1fr) minmax(0,1fr);
+    gap: 16px; padding: 16px; max-width: 1560px; width: 100%; margin: 0 auto; min-height: 0;
   }
-  .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .col { display: flex; flex-direction: column; gap: 14px; min-height: 0; min-width: 0; }
+  /* 侧栏（知识库） */
+  aside {
+    background: linear-gradient(180deg, #10162b, #1a2340); color: var(--side-text);
+    border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column;
+    gap: 10px; box-shadow: var(--shadow);
+  }
+  aside h2 { margin: 2px 4px 0; font-size: 12px; letter-spacing: .08em; color: #8ea0c0; text-transform: uppercase; }
+  aside .newkb { display: grid; gap: 8px; background: rgba(255,255,255,.06); border-radius: 10px; padding: 10px; }
+  aside .newkb input { background: rgba(255,255,255,.08); border-color: transparent; color: #e6ecf7; }
+  aside .newkb input::placeholder { color: #7c8bad; }
+  aside .newkb input:focus { outline: none; background: rgba(255,255,255,.14); }
+  #kbList { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
+  #kbList li {
+    display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 9px;
+    cursor: pointer; margin-bottom: 4px; border: 1px solid transparent; transition: background .15s;
+  }
+  #kbList li:hover { background: rgba(255,255,255,.08); }
+  #kbList li.active { background: rgba(99,102,241,.28); border-color: rgba(129,140,248,.5); }
+  #kbList li .kbicon {
+    width: 26px; height: 26px; border-radius: 7px; flex: none; display: grid; place-items: center;
+    background: rgba(255,255,255,.1); font-size: 12px;
+  }
+  #kbList li .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6ecf7; }
+  #kbList li .meta { margin-left: auto; font-size: 11px; color: #8ea0c0; white-space: nowrap; }
+  .aside-foot { font-size: 11px; color: #66738f; border-top: 1px solid rgba(255,255,255,.08); padding-top: 10px; }
+  .aside-foot b { color: #9db2d8; font-weight: 600; }
+  /* 卡片 */
   .card {
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 10px; padding: 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; min-height: 0;
   }
-  .card h2 { font-size: 14px; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
+  .card h2 { font-size: 14px; margin: 0 0 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .card h2 .sub { font-weight: 400; font-size: 12px; color: var(--muted); }
+  .stats { display: flex; gap: 10px; margin-bottom: 12px; }
+  .stat {
+    flex: 1; background: #f8f9fc; border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 12px;
+  }
+  .stat .num { font-size: 20px; font-weight: 700; color: var(--accent); }
+  .stat .lab { font-size: 11px; color: var(--muted); }
   .row { display: flex; gap: 8px; }
   .row > input, .row > textarea { flex: 1; min-width: 0; }
-  textarea { resize: vertical; }
-  ul.list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 260px; overflow: auto; }
-  ul.list li {
-    display: flex; align-items: center; gap: 8px;
-    padding: 7px 9px; border-radius: 6px; cursor: pointer; border: 1px solid transparent;
-  }
-  ul.list li:hover { background: #f0f4ff; }
-  ul.list li.active { background: #e8efff; border-color: #c3d4fb; }
-  ul.list li .meta { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
-  ul.list li .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .badge { font-size: 11px; padding: 1px 7px; border-radius: 99px; background: #eef1f5; color: var(--muted); }
+  .badge { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: #eef1f5; color: var(--muted); white-space: nowrap; }
   .badge.ready { background: #dcfce7; color: var(--ok); }
-  .badge.pending, .badge.processing { background: #fef3c7; color: var(--warn); }
+  .badge.pending { background: #fef3c7; color: var(--warn); }
+  .badge.processing { background: #dbeafe; color: #2563eb; }
   .badge.failed { background: #fee2e2; color: var(--err); }
-  .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
-  #chatLog {
-    display: flex; flex-direction: column; gap: 10px;
-    max-height: 380px; overflow: auto; margin-bottom: 10px;
+  .doclist { list-style: none; margin: 10px 0 0; padding: 0; overflow: auto; }
+  .doclist li {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: #fff;
   }
-  .bubble { border-radius: 8px; padding: 9px 12px; max-width: 92%; white-space: pre-wrap; word-break: break-word; }
-  .bubble.q { align-self: flex-end; background: var(--accent); color: #fff; }
-  .bubble.a { align-self: flex-start; background: #f0f1f3; }
-  .src { font-size: 12px; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 8px; margin-top: 6px; }
-  #toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); display: none;
-    background: #111827; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px; }
+  .doclist .dicon {
+    width: 34px; height: 34px; border-radius: 9px; flex: none; display: grid; place-items: center;
+    background: #eef2ff; font-size: 16px;
+  }
+  .doclist .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doclist .meta { font-size: 11px; color: var(--muted); }
+  .doclist .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .empty {
+    color: var(--muted); font-size: 13px; text-align: center; padding: 26px 10px;
+    border: 1px dashed var(--line); border-radius: 10px; background: #fafbfd;
+  }
+  .empty .ico { display: block; margin: 0 auto 8px; width: 28px; height: 28px; color: #b6c0d0; }
+  .ico-sm { width: 15px; height: 15px; vertical-align: -2px; color: var(--muted); }
+  .ico-card { width: 16px; height: 16px; vertical-align: -3px; color: var(--accent); }
+  /* 切块预览 */
+  #chunkPreview { margin-top: 12px; display: none; }
+  #chunkPreview .blocks { display: flex; flex-wrap: wrap; gap: 6px; }
+  #chunkPreview .blk {
+    font-size: 11px; padding: 4px 8px; border-radius: 7px; max-width: 340px;
+    background: #eef2ff; border: 1px solid #dbe3fe; color: #4338ca;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* 问答 */
+  #chatLog {
+    display: flex; flex-direction: column; gap: 12px; flex: 1; overflow: auto;
+    padding-right: 4px; min-height: 0;
+  }
+  .bubble { border-radius: 12px; padding: 10px 14px; max-width: 90%; white-space: pre-wrap; word-break: break-word; }
+  .bubble.q {
+    align-self: flex-end; background: linear-gradient(135deg, var(--accent), #6d28d9);
+    color: #fff; border-bottom-right-radius: 4px;
+  }
+  .bubble.a { align-self: flex-start; background: #f4f5f8; border-bottom-left-radius: 4px; }
+  .bubble.a.typing { color: var(--muted); }
+  .srcs { margin-top: 8px; display: grid; gap: 6px; }
+  .src {
+    background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--accent-2);
+    border-radius: 8px; padding: 7px 10px; font-size: 12px; color: #374151;
+  }
+  .src .scoreline { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .src .scorebar { flex: 1; height: 4px; background: #e5e9f0; border-radius: 99px; overflow: hidden; }
+  .src .scorebar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-2), #8b5cf6); }
+  .src .score { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+  .chip {
+    font-size: 12px; padding: 4px 10px; border-radius: 99px; background: #eef2ff;
+    color: var(--accent); cursor: pointer; border: 1px solid #dbe3fe;
+  }
+  .chip:hover { background: #e0e7ff; }
+  .chat-input { display: flex; gap: 8px; margin-top: 12px; }
+  /* toast + 演示进度 */
+  #toast {
+    position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); display: none;
+    background: #111827; color: #fff; padding: 9px 18px; border-radius: 10px; font-size: 13px;
+    z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  }
   #toast.err { background: var(--err); }
+  #demoStrip {
+    position: fixed; right: 18px; bottom: 18px; width: 300px; display: none; z-index: 40;
+    background: #10162b; color: #cbd5e1; border-radius: 12px; padding: 12px 14px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.3); font-size: 12px;
+  }
+  #demoStrip h3 { margin: 0 0 8px; font-size: 13px; color: #fff; display: flex; align-items: center; gap: 8px; }
+  #demoStrip ol { margin: 0; padding-left: 18px; }
+  #demoStrip li { margin: 3px 0; color: #66738f; }
+  #demoStrip li.done { color: #34d399; }
+  #demoStrip li.doing { color: #fff; }
+  @media (max-width: 1080px) {
+    body { grid-template-rows: 56px auto; height: auto; }
+    main { grid-template-columns: 1fr; }
+    #chatLog { max-height: 320px; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>kb-service 演示台</h1>
-  <span class="tag" id="authTag">未登录</span>
+  <div class="brand"><span class="logo">KB</span>kb-service <small>知识库问答 · 演示台</small></div>
+  <span class="pill"><span class="dot" id="healthDot"></span><span id="healthText">检测服务…</span></span>
+  <span class="pill" id="dbPill" title="底层：MySQL 8.4 · SQLAlchemy 2.0 · Alembic 迁移">MySQL 8.4 · 已迁移 v9540b93</span>
   <div class="spacer"></div>
-  <input id="userIdInput" placeholder="用户ID（留空=随机新用户）" style="width:280px">
-  <button id="loginBtn">签发 token</button>
+  <button class="play" id="demoBtn">▶ 一键演示剧本</button>
+  <div class="userchip"><span class="avatar" id="avatar">U</span><span id="uidShort">未登录</span></div>
 </header>
 
 <main>
   <!-- 左：知识库 -->
-  <div class="col">
-    <div class="card">
-      <h2>① 知识库</h2>
-      <div class="row">
-        <input id="kbName" placeholder="名称">
-        <button id="createKbBtn">建库</button>
-      </div>
-      <input id="kbDesc" placeholder="描述（可空）" style="width:100%;margin-top:8px">
-      <ul class="list" id="kbList"></ul>
-      <div class="empty" id="kbEmpty">还没有知识库</div>
+  <aside>
+    <h2>知识库</h2>
+    <div class="newkb">
+      <input id="kbName" placeholder="新知识库名称" maxlength="100">
+      <input id="kbDesc" placeholder="描述（可空）" maxlength="500">
+      <button id="createKbBtn">＋ 建库</button>
     </div>
-  </div>
+    <ul id="kbList"></ul>
+    <div class="aside-foot">
+      演示链路：<b>建库 → 传文档 → 切块入库 → 检索问答</b><br>
+      数据落在 <b>MySQL kb_dev</b>，重启不丢
+    </div>
+  </aside>
 
   <!-- 中：文档 -->
   <div class="col">
-    <div class="card">
-      <h2>② 文档 <span id="docKbName" class="tag"></span></h2>
+    <div class="card" style="flex:1.2">
+      <h2><svg class="ico-card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg> 文档 <span class="sub" id="docKbName">未选中知识库</span></h2>
+      <div class="stats">
+        <div class="stat"><div class="num" id="stDocs">–</div><div class="lab">文档数</div></div>
+        <div class="stat"><div class="num" id="stChunks">–</div><div class="lab">切片总数</div></div>
+        <div class="stat"><div class="num" id="stKbs">–</div><div class="lab">知识库总数</div></div>
+      </div>
       <div class="row">
-        <input id="docTitle" placeholder="标题">
+        <input id="docTitle" placeholder="文档标题" maxlength="200">
+        <button id="uploadBtn" style="white-space:nowrap">上传入库</button>
       </div>
-      <textarea id="docContent" rows="4" placeholder="正文（≥1200 字可看到切块效果）" style="width:100%;margin-top:8px"></textarea>
-      <div class="row" style="margin-top:8px">
-        <span class="tag" id="docLen">0 字</span>
-        <div class="spacer" style="flex:1"></div>
-        <button id="uploadBtn">上传</button>
+      <textarea id="docContent" rows="4" placeholder="粘贴正文（≥1200 字可看到多块切片效果）…" style="margin-top:8px"></textarea>
+      <div class="row" style="margin-top:6px;align-items:center">
+        <span class="badge" id="docLen">0 字</span>
+        <div style="flex:1"></div>
+        <span class="sub" style="font-size:11px;color:var(--muted)">chunk_size=400 · overlap=50</span>
       </div>
-      <ul class="list" id="docList" style="max-height:200px"></ul>
-      <div class="empty" id="docEmpty">先在左侧选中一个知识库</div>
+      <div id="chunkPreview">
+        <div class="sub" style="font-size:12px;color:var(--muted);margin-bottom:6px">
+          <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          切片预览（前端按后端同规则本地模拟，真实切片在 MySQL chunks 表）
+        </div>
+        <div class="blocks" id="blocks"></div>
+      </div>
+      <div id="docArea" style="margin-top:12px;overflow:auto;min-height:0">
+        <div class="empty" id="docEmpty">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          先在左侧选中一个知识库
+        </div>
+        <ul class="doclist" id="docList"></ul>
+      </div>
     </div>
   </div>
 
   <!-- 右：问答 -->
   <div class="col">
-    <div class="card">
-      <h2>③ 提问</h2>
-      <div id="chatLog"><div class="empty">提问会先检索 chunks，把命中的片段喂给 LLM</div></div>
-      <div class="row">
-        <input id="question" placeholder="问点什么…">
-        <button id="askBtn">发送</button>
+    <div class="card" style="flex:1.2">
+      <h2><svg class="ico-card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.8-.9L3 21l1.9-4.4A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg> 知识库问答 <span class="sub">检索 chunks → 命中片段喂给 LLM</span></h2>
+      <div id="chatLog">
+        <div class="empty" id="chatEmpty">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.8-.9L3 21l1.9-4.4A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/><path d="M9 10h6M9 13.5h4"/></svg>
+          选中知识库后提问，回答会附上命中片段与得分
+        </div>
+      </div>
+      <div class="chips">
+        <span class="chip" data-q="什么是 RAG？">什么是 RAG？</span>
+        <span class="chip" data-q="RAG">RAG（测检索命中）</span>
+        <span class="chip" data-q="总结一下这篇文档">总结一下这篇文档</span>
+      </div>
+      <div class="chat-input">
+        <input id="question" placeholder="问点什么…" maxlength="2000">
+        <button id="askBtn" style="white-space:nowrap">发送</button>
       </div>
     </div>
   </div>
 </main>
 
 <div id="toast"></div>
+<div id="demoStrip">
+  <h3>▶ 演示剧本进行中</h3>
+  <ol id="demoSteps">
+    <li>创建演示知识库</li>
+    <li>上传 1200 字文档（切块入库）</li>
+    <li>刷新文档列表与统计</li>
+    <li>发起检索问答</li>
+    <li>完成 — 数据已落 MySQL</li>
+  </ol>
+</div>
 
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
 let token = null;
-let currentKb = null;   // 当前选中的知识库 id
-let kbs = [];           // 缓存，提问按钮要用
+let userId = null;
+let currentKb = null;   // 当前选中的知识库 {id, name}
+let kbs = [];
 
 // ---------- 基础设施 ----------
 function toast(msg, isErr = false) {
@@ -159,65 +328,105 @@ async function api(method, path, body) {
     let msg = "HTTP " + resp.status;
     try {
       const j = await resp.json();
-      if (j.message) msg = j.message;        // 统一错误响应 {code,message,data}
+      if (j.message) msg = j.message;
     } catch (_) { /* 204 或非 JSON */ }
-    if (resp.status === 401) { setAuth(null); msg = "未登录或凭证过期，请重新签发 token"; }
+    if (resp.status === 401) { setAuth(null, null); msg = "未登录或凭证过期，请重新签发 token"; }
     throw new Error(msg);
   }
   return resp.status === 204 ? null : resp.json();
 }
 
-// 注意三种返回形状：
-//   建库 → ApiResponse{code,message,data}；列表 → Page{items,...}；文档/问答 → 本体
+// 三种返回形状：建库 → ApiResponse{data}；列表 → Page{items}；文档/问答 → 本体
 function unwrap(j) { return j && j.data !== undefined && j.items === undefined ? j.data : j; }
 
-function setAuth(tk) {
-  token = tk;
-  $("authTag").innerHTML = tk ? "已登录 <b>●</b>" : "未登录";
+function setAuth(tk, uid) {
+  token = tk; userId = uid;
+  if (tk) {
+    $("uidShort").textContent = uid.slice(0, 8) + "…";
+    $("avatar").textContent = uid.slice(0, 1).toUpperCase();
+  } else {
+    $("uidShort").textContent = "未登录";
+    $("avatar").textContent = "U";
+  }
+}
+
+// ---------- 健康检查 ----------
+async function pingHealth() {
+  try {
+    const r = await fetch("/health");
+    const ok = r.ok;
+    $("healthDot").className = "dot " + (ok ? "on" : "off");
+    $("healthText").textContent = ok ? "服务在线" : "服务异常";
+  } catch (_) {
+    $("healthDot").className = "dot off";
+    $("healthText").textContent = "服务离线";
+  }
 }
 
 // ---------- 登录 ----------
-$("loginBtn").onclick = async () => {
-  const uid = $("userIdInput").value.trim();
-  const body = uid ? { user_id: uid } : {};
+async function login() {
   try {
-    const j = await api("POST", "/api/v1/dev/token", body);
-    setAuth(j.access_token);
-    $("userIdInput").value = j.user_id;
-    toast("token 已签发，user_id = " + j.user_id);
+    const j = await api("POST", "/api/v1/dev/token", {});
+    setAuth(j.access_token, j.user_id);
     loadKbs();
   } catch (e) { toast(e.message, true); }
-};
+}
 
 // ---------- 知识库 ----------
 async function loadKbs() {
   try {
     const page = unwrap(await api("GET", "/api/v1/kbs?page=1&size=50"));
     kbs = page.items;
+    $("stKbs").textContent = page.total;
     renderKbs();
   } catch (e) { toast(e.message, true); }
 }
 
 function renderKbs() {
   const ul = $("kbList");
-  $("kbEmpty").style.display = kbs.length ? "none" : "block";
   ul.innerHTML = "";
+  if (!kbs.length) {
+    const li = document.createElement("li");
+    li.style.cssText = "cursor:default;color:#7c8bad;font-size:12px;padding:14px 8px";
+    li.textContent = "还没有知识库，先建一个 ↑";
+    ul.append(li);
+    return;
+  }
   for (const kb of kbs) {
     const li = document.createElement("li");
-    li.className = kb.id === currentKb ? "active" : "";
+    if (currentKb && kb.id === currentKb.id) li.className = "active";
+    const icon = document.createElement("span");
+    icon.className = "kbicon";
+    icon.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
     const name = document.createElement("span");
-    name.className = "title";
-    name.textContent = kb.name;
+    name.className = "name"; name.textContent = kb.name; name.title = kb.description || kb.name;
     const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = kb.doc_count + " 篇";
+    meta.className = "meta"; meta.textContent = kb.doc_count + " 篇";
     const del = document.createElement("button");
-    del.className = "danger"; del.textContent = "删";
-    del.onclick = (ev) => { ev.stopPropagation(); removeKb(kb.id); };
-    li.append(name, meta, del);
+    del.className = "danger"; del.textContent = "✕"; del.title = "删除知识库（级联删除文档）";
+    del.onclick = async (ev) => {
+      ev.stopPropagation();
+      if (!confirm(`删除「${kb.name}」？其下所有文档会被级联删除。`)) return;
+      try {
+        await api("DELETE", "/api/v1/kbs/" + kb.id);
+        if (currentKb && currentKb.id === kb.id) clearDocPane();
+        toast("已删除（FK CASCADE 带走了文档）");
+        loadKbs();
+      } catch (e) { toast(e.message, true); }
+    };
+    li.append(icon, name, meta, del);
     li.onclick = () => selectKb(kb);
     ul.append(li);
   }
+}
+
+function clearDocPane() {
+  currentKb = null;
+  $("docList").innerHTML = "";
+  $("docEmpty").style.display = "block";
+  $("docKbName").textContent = "未选中知识库";
+  $("stDocs").textContent = "–"; $("stChunks").textContent = "–";
+  $("chunkPreview").style.display = "none";
 }
 
 $("createKbBtn").onclick = async () => {
@@ -226,22 +435,13 @@ $("createKbBtn").onclick = async () => {
   try {
     await api("POST", "/api/v1/kbs", { kbName: name, description: $("kbDesc").value.trim() || null });
     $("kbName").value = ""; $("kbDesc").value = "";
-    toast("知识库已创建（数据已在 MySQL 里）");
+    toast("知识库已创建，数据已在 MySQL 里");
     loadKbs();
   } catch (e) { toast(e.message, true); }
 };
 
-async function removeKb(id) {
-  try {
-    await api("DELETE", "/api/v1/kbs/" + id);
-    if (currentKb === id) { currentKb = null; $("docList").innerHTML = ""; $("docEmpty").style.display = "block"; $("docKbName").textContent = ""; }
-    toast("已删除（FK CASCADE 带走了文档）");
-    loadKbs();
-  } catch (e) { toast(e.message, true); }
-}
-
 function selectKb(kb) {
-  currentKb = kb.id;
+  currentKb = { id: kb.id, name: kb.name };
   $("docKbName").textContent = "· " + kb.name;
   renderKbs();
   loadDocs();
@@ -251,31 +451,64 @@ function selectKb(kb) {
 async function loadDocs() {
   if (!currentKb) return;
   try {
-    const page = unwrap(await api("GET", "/api/v1/kbs/" + currentKb + "/documents?page=1&size=50"));
+    const page = unwrap(await api("GET", "/api/v1/kbs/" + currentKb.id + "/documents?page=1&size=50"));
     const docs = page.items;
     $("docEmpty").style.display = docs.length ? "none" : "block";
+    $("stDocs").textContent = page.total;
+    const totalChunks = docs.reduce((s, d) => s + (d.chunk_count || 0), 0);
+    $("stChunks").textContent = totalChunks;
     const ul = $("docList");
     ul.innerHTML = "";
     for (const d of docs) {
       const li = document.createElement("li");
-      const title = document.createElement("span");
-      title.className = "title"; title.textContent = d.title;
+      const icon = document.createElement("span");
+      icon.className = "dicon";
+      icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>';
+      const mid = document.createElement("div");
+      mid.style.cssText = "min-width:0";
+      const t = document.createElement("div");
+      t.className = "title"; t.textContent = d.title;
+      const m = document.createElement("div");
+      m.className = "meta"; m.textContent = new Date(d.created_at).toLocaleString("zh-CN");
+      mid.append(t, m);
+      const right = document.createElement("div");
+      right.className = "right";
       const badge = document.createElement("span");
-      badge.className = "badge " + d.status; badge.textContent = d.status + "·" + d.chunk_count + "块";
+      badge.className = "badge " + d.status; badge.textContent = d.status;
+      const cb = document.createElement("span");
+      cb.className = "badge"; cb.textContent = d.chunk_count + " 块";
       const del = document.createElement("button");
-      del.className = "danger"; del.textContent = "删";
+      del.className = "danger"; del.textContent = "✕";
       del.onclick = async (ev) => {
         ev.stopPropagation();
-        await api("DELETE", "/api/v1/kbs/" + currentKb + "/documents/" + d.id);
-        loadDocs(); loadKbs();
+        if (!confirm(`删除文档「${d.title}」？`)) return;
+        try {
+          await api("DELETE", "/api/v1/kbs/" + currentKb.id + "/documents/" + d.id);
+          toast("已删除（doc_count 已同步 -1）");
+          loadDocs(); loadKbs();
+        } catch (e) { toast(e.message, true); }
       };
-      li.append(title, badge, del);
+      right.append(badge, cb, del);
+      li.append(icon, mid, right);
       ul.append(li);
     }
   } catch (e) { toast(e.message, true); }
 }
 
-$("docContent").addEventListener("input", (e) => { $("docLen").textContent = e.target.value.length + " 字"; });
+$("docContent").addEventListener("input", (e) => {
+  $("docLen").textContent = e.target.value.length + " 字";
+});
+
+// 本地切片预览：与后端同规则（size=400, overlap=50 → step=350）
+function localChunkPreview(text) {
+  const size = 400, step = 350, out = [];
+  for (let i = 0; i < text.length; i += step) {
+    const piece = text.slice(i, i + size);
+    if (piece.trim()) out.push(piece);
+    if (i + size >= text.length) break;
+  }
+  return out;
+}
 
 $("uploadBtn").onclick = async () => {
   if (!currentKb) return toast("先选中一个知识库", true);
@@ -284,8 +517,20 @@ $("uploadBtn").onclick = async () => {
   if (!title || !content.trim()) return toast("标题和正文都不能为空", true);
   $("uploadBtn").disabled = true;
   try {
-    const doc = unwrap(await api("POST", "/api/v1/kbs/" + currentKb + "/documents", { title, content }));
-    toast("已入库：" + doc.status + "，切了 " + doc.chunk_count + " 块");
+    const doc = unwrap(await api("POST", "/api/v1/kbs/" + currentKb.id + "/documents", { title, content }));
+    toast(`已入库：${doc.status}，切了 ${doc.chunk_count} 块（已落 MySQL）`);
+    // 本地切片预览
+    const pieces = localChunkPreview(content);
+    const pv = $("chunkPreview"), blocks = $("blocks");
+    blocks.innerHTML = "";
+    pieces.forEach((p, i) => {
+      const b = document.createElement("span");
+      b.className = "blk";
+      b.textContent = `#${i} ${p.slice(0, 24)}…`;
+      b.title = p;
+      blocks.append(b);
+    });
+    pv.style.display = pieces.length ? "block" : "none";
     $("docTitle").value = ""; $("docContent").value = ""; $("docLen").textContent = "0 字";
     loadDocs(); loadKbs();
   } catch (e) { toast(e.message, true); }
@@ -293,13 +538,13 @@ $("uploadBtn").onclick = async () => {
 };
 
 // ---------- 问答 ----------
-$("askBtn").onclick = async () => {
-  if (!token) return toast("先签发 token", true);
+async function ask(q) {
+  if (!token) return toast("token 尚未就绪", true);
   if (!currentKb) return toast("先选中一个知识库", true);
-  const q = $("question").value.trim();
+  q = (q || "").trim();
   if (!q) return toast("问题不能为空", true);
   const log = $("chatLog");
-  log.querySelector(".empty")?.remove();
+  $("chatEmpty")?.remove();
   const addBubble = (cls, text) => {
     const b = document.createElement("div");
     b.className = "bubble " + cls;
@@ -310,22 +555,146 @@ $("askBtn").onclick = async () => {
   };
   addBubble("q", q);
   $("question").value = "";
-  const ab = addBubble("a", "思考中…");
+  const ab = addBubble("a typing", "检索 chunks 并生成中…");
   try {
-    const r = await api("POST", "/api/v1/chat", { kb_id: currentKb, question: q, stream: false });
-    let html = r.answer || "(无答案)";
-    for (const s of r.sources || []) {
-      const d = document.createElement("div");
-      d.className = "src";
-      d.textContent = "来源·块" + s.chunk_index + "·得分" + s.score.toFixed(3) + "：" + s.snippet;
-      ab.append(d);
+    const r = await api("POST", "/api/v1/chat", { kb_id: currentKb.id, question: q, stream: false });
+    ab.className = "bubble a";
+    ab.textContent = r.answer || "(无答案)";
+    if (r.sources && r.sources.length) {
+      const wrap = document.createElement("div");
+      wrap.className = "srcs";
+      const head = document.createElement("div");
+      head.style.cssText = "font-size:11px;color:var(--muted)";
+      head.textContent = `命中 ${r.sources.length} 个片段（按得分降序）：`;
+      wrap.append(head);
+      for (const s of r.sources) {
+        const d = document.createElement("div");
+        d.className = "src";
+        const line = document.createElement("div");
+        line.className = "scoreline";
+        const tag = document.createElement("span");
+        tag.className = "score";
+        tag.textContent = `块 #${s.chunk_index}`;
+        const bar = document.createElement("div");
+        bar.className = "scorebar";
+        const fill = document.createElement("i");
+        fill.style.width = Math.min(100, Math.max(3, s.score * 100)) + "%";
+        bar.append(fill);
+        const sc = document.createElement("span");
+        sc.className = "score";
+        sc.textContent = s.score.toFixed(3);
+        line.append(tag, bar, sc);
+        const txt = document.createElement("div");
+        txt.textContent = s.snippet.length > 120 ? s.snippet.slice(0, 120) + "…" : s.snippet;
+        d.append(line, txt);
+        wrap.append(d);
+      }
+      ab.append(wrap);
     }
-    ab.firstChild.textContent = html;
-  } catch (e) { ab.textContent = "出错：" + e.message; }
+    log.scrollTop = log.scrollHeight;
+  } catch (e) {
+    ab.className = "bubble a";
+    ab.textContent = "出错：" + e.message;
+  }
+}
+
+$("askBtn").onclick = () => ask($("question").value);
+$("question").addEventListener("keydown", (e) => { if (e.key === "Enter") ask($("question").value); });
+document.querySelectorAll(".chip").forEach((c) => (c.onclick = () => ask(c.dataset.q)));
+
+// ---------- 一键演示剧本 ----------
+let demoRunning = false;
+$("demoBtn").onclick = async () => {
+  if (demoRunning) return;
+  demoRunning = true;
+  $("demoBtn").disabled = true;
+  const strip = $("demoStrip");
+  const steps = [...$("demoSteps").children];
+  strip.style.display = "block";
+  const mark = (i, cls) => { steps[i].className = cls; };
+  steps.forEach((li) => (li.className = ""));
+  try {
+    // 0 准备登录
+    if (!token) await login();
+    // 1 建库
+    // 名字带时间戳：UNIQUE(owner_id, name) 这条约束是真的，重复演示不能撞它
+    const demoName = "演示知识库 " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    mark(0, "doing");
+    await api("POST", "/api/v1/kbs", { kbName: demoName, description: "一键演示生成" });
+    await loadKbs();
+    const kb = kbs.find((k) => k.name === demoName);
+    currentKb = { id: kb.id, name: kb.name };
+    $("docKbName").textContent = "· " + kb.name;
+    renderKbs();
+    mark(0, "done");
+    // 2 传文档
+    mark(1, "doing");
+    const content = (
+      "RAG（检索增强生成）是一种把外部知识与生成模型结合的技术路线。它的核心思想是：先检索，后生成。" +
+      "当用户提出问题时，系统先在知识库中检索出与问题最相关的若干片段，再把这些片段作为上下文交给大语言模型，" +
+      "让模型基于真实材料回答，而不是仅凭参数里的记忆。这样可以显著降低幻觉，让答案可追溯、可验证。" +
+      "在工程实现上，切块参数直接决定检索质量。chunk_size 取 400 字左右时，单个片段既能装下一个完整论点，" +
+      "又不至于把多个主题混在一起；overlap 取 50 字，是为了让跨块的句子在边界处仍然可被命中，" +
+      "避免因为一段话被切断而丢失语义。如果 chunk 太小，检索到的片段缺少上下文，模型只能靠猜；" +
+      "如果 chunk 太大，一个片段里混着多个主题，相似度得分会被稀释，命中精度反而下降。" +
+      "检索这一步：系统把用户的问题与 chunks 表中的片段逐一比对，按得分排序，取前 top_k 条。" +
+      "当前版本用的是关键词匹配，优点是实现简单、可解释性强，缺点是换个说法就可能匹配不上。" +
+      "例如用户问这个系统的检索原理是什么，而正文里写的是检索模块按关键词匹配，" +
+      "两者字面重合度低，得分就会偏低。这也是后续要引入向量检索的原因：" +
+      "向量检索比较的是语义相似度，而不是字面重合，跨表述的提问也能命中正确片段。" +
+      "生成这一步：命中的片段会被拼进提示词，作为上下文交给大语言模型，并要求模型只依据这些材料回答；" +
+      "如果没有命中任何片段，系统应当明确告知用户没有找到相关资料，而不是让模型自由发挥。" +
+      "回答里附带的来源信息（片段编号与得分）让用户可以回查原文，这是 RAG 相对纯生成的核心优势——答案可追溯。" +
+      "数据是怎么落库的：建库写入 knowledge_bases 表，传文档写入 documents 表（正文、状态、切片数），" +
+      "切片写入 chunks 表，每一步都在同一个事务里提交；任一环节失败，整笔回滚，" +
+      "不会留下文档存在但没有切片的半成品。文档计数通过单条 UPDATE 原子自增，" +
+      "多个请求并发传文档时不会丢更新，这也是并发场景下必须把相对量下推给数据库的原因。" +
+      "把这条链路放进演示：第一步建库并确认返回的 id 落在 knowledge_bases 表；" +
+      "第二步上传文档，观察状态从 pending 变为 ready、切片数从 0 变为 4；" +
+      "第三步刷新列表，确认数据来自数据库而不是进程内存；第四步提问，检查回答是否附带片段编号与得分；" +
+      "第五步重启服务再查，数据依然存在。五步走完，才算把一条完整的数据链路演示清楚，" +
+      "而不是只证明了接口能返回 200。这条判据同样适用于锁、事务和迁移：能被观察到的事实，才算证据。" +
+      "怎么验证这条链路真的通了：重启服务后再查一次，数据仍在；换一个数据库连接查询，仍能读到；" +
+      "把 commit 去掉，集成测试必须报错。这三条一起构成链路通了的判据，而不是接口返回 201 就算成功。"
+    );
+    const doc = unwrap(await api("POST", "/api/v1/kbs/" + kb.id + "/documents", { title: "RAG 技术讲义", content }));
+    await loadDocs(); await loadKbs();
+    mark(1, "done");
+    mark(2, "doing");
+    $("stDocs").textContent = "1";
+    $("stChunks").textContent = doc.chunk_count;
+    const pieces = localChunkPreview(content);
+    const blocks = $("blocks");
+    blocks.innerHTML = "";
+    pieces.forEach((p, i) => {
+      const b = document.createElement("span");
+      b.className = "blk";
+      b.textContent = `#${i} ${p.slice(0, 24)}…`;
+      b.title = p;
+      blocks.append(b);
+    });
+    $("chunkPreview").style.display = "block";
+    mark(2, "done");
+    // 3 提问
+    mark(3, "doing");
+    $("chatEmpty")?.remove();
+    await new Promise((r) => setTimeout(r, 400));
+    await ask("什么是 RAG？");
+    mark(3, "done");
+    mark(4, "done");
+    toast("演示剧本跑完：数据已在 MySQL 里，重启不丢");
+  } catch (e) {
+    toast("演示中断：" + e.message, true);
+  }
+  setTimeout(() => { strip.style.display = "none"; demoRunning = false; $("demoBtn").disabled = false; }, 1600);
 };
 
-// 首次进入：自动签发一个随机用户，减少演示摩擦
-window.addEventListener("DOMContentLoaded", () => $("loginBtn").click());
+// ---------- 启动 ----------
+window.addEventListener("DOMContentLoaded", () => {
+  pingHealth();
+  setInterval(pingHealth, 15000);
+  login();
+});
 </script>
 </body>
 </html>
