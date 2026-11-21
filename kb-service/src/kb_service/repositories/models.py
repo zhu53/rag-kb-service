@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from kb_service.repositories.rows import DocRow, KBRow
+from kb_service.repositories.rows import DocRow, KBRow, UserRow
 
 
 class Base(DeclarativeBase):
@@ -91,3 +91,32 @@ class Chunk(Base):
     seq: Mapped[int] = mapped_column()  # 分块在文档里的顺序号
     content: Mapped[str] = mapped_column(Text)  # 分块正文
     doc: Mapped[Document] = relationship(back_populates="chunks")
+
+
+class User(Base):
+    __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("email", name="uq_user_email"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    email: Mapped[str] = mapped_column(String(255))
+    password_hash: Mapped[str] = mapped_column(String(128))
+    role: Mapped[str] = mapped_column(String(20), default="member")
+    is_banned: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    def to_row(self) -> UserRow:
+        # 快照不含 password_hash（敏感列不外带），与 UserRow 的字段清单严格一致
+        return UserRow(
+            id=self.id,
+            email=self.email,
+            role=self.role,
+            is_banned=self.is_banned,
+            created_at=self.created_at,
+        )

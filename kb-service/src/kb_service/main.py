@@ -7,6 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import IntegrityError
 
 from kb_service.api.v1 import health
 from kb_service.api.v1.router import api_router
@@ -58,6 +59,23 @@ def create_app() -> FastAPI:
                 code=42200,
                 message="参数校验失败",
                 data=jsonable_encoder(exc.errors()),
+            ).model_dump(),
+        )
+
+    # 债①（W7 遗留）：唯一约束撞车是客户端输入冲突，该 409，不该 500。
+    # 真话在 exc.orig（数据库驱动的原始异常）：MySQL 说 "Duplicate entry ... for key ..."，
+    # sqlite 说 "UNIQUE constraint failed: ..."——两种方言都认，其余约束错误交回默认 500。
+    @app.exception_handler(IntegrityError)
+    async def handle_integrity(_: Request, exc: IntegrityError) -> JSONResponse:
+        raw = str(exc.orig if exc.orig is not None else exc).lower()
+        if not ("duplicate" in raw or "unique" in raw):
+            raise exc
+        return JSONResponse(
+            status_code=409,
+            content=ApiResponse(
+                code=40900,
+                message="资源已存在或唯一字段冲突",
+                data=None,
             ).model_dump(),
         )
 
