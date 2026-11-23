@@ -74,9 +74,10 @@ class KBRepository:
         if obj is None:
             return None
         payload = data.model_dump(exclude_unset=True)
+        # 不再 `if v is not None` 过滤（债②）：None 是合法值——用户显式清空 description。
+        # name=None 在 schema 层已拦成 422，能进到这里的是"真正的更新"。
         for k, v in payload.items():
-            if v is not None:
-                setattr(obj, k, v)
+            setattr(obj, k, v)
         return obj.to_row()
 
     def delete(self, kb_id: UUID) -> bool:

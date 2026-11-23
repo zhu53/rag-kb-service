@@ -45,3 +45,13 @@ class UserRow(TypedDict):
     role: str
     is_banned: bool
     created_at: datetime
+
+
+class UserCredentialsRow(TypedDict):
+    """
+    登录必须要password_hash
+    只返回 id + hash，最小暴露
+    """
+
+    id: UUID
+    password_hash: str

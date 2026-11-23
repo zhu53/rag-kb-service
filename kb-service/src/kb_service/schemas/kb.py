@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Generic, TypeVar
+from typing import Annotated, Generic, Self, TypeVar
 from uuid import UUID
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from kb_service.schemas.common import not_blank
 
@@ -33,6 +33,18 @@ class KBUpdate(BaseModel):
     # 不继承 KBBase（全字段可选语义不同），但复用同一组别名——PATCH 路径约束不漏。
     name: KbName | None = None
     description: KbDescription = None
+
+    @model_validator(mode="after")
+    def _reject_explicit_null_name(self) -> Self:
+        """`{"name": null}` 是 422，不是 200 原值不变、也不是 500。
+
+        判据：`model_fields_set` 记录"客户端到底传了哪些键"，
+        所以"没传 name"（合法，部分更新）和"传了 name 但值为 null"（非法，名称必须有值）
+        能区分开——只靠 `is None` 分不出来，这正是债②的根因。
+        """
+        if "name" in self.model_fields_set and self.name is None:
+            raise ValueError("name 不能置空：改名就传新名字，不改就别传这个字段")
+        return self
 
 
 class KBOut(KBBase):

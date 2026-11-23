@@ -4,14 +4,12 @@ from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel, ValidationError
 
 from kb_service.core.config import get_settings
 from kb_service.core.exceptions import UnauthorizedError
-
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class TokenClaims(BaseModel):
@@ -27,11 +25,14 @@ class TokenClaims(BaseModel):
 
 
 def hash_password(raw: str) -> str:
-    return _pwd_ctx.hash(raw)
+    return bcrypt.hashpw(raw.encode("utf-8"), bcrypt.gensalt(12)).decode("ascii")
 
 
 def verify_password(raw: str, hashed: str) -> bool:
-    return _pwd_ctx.verify(raw, hashed)
+    try:
+        return bcrypt.checkpw(raw.encode("utf-8"), hashed.encode("ascii"))
+    except ValueError:
+        return False
 
 
 def create_access_token(subject: str, extra: Mapping[str, object] | None = None) -> str:

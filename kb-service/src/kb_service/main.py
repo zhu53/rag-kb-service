@@ -34,6 +34,7 @@ def create_app() -> FastAPI:
             {"name": constants.TAG_KBS, "description": "知识库"},
             {"name": constants.TAG_DOCS, "description": "文档"},
             {"name": constants.TAG_CHAT, "description": "聊天"},
+            {"name": constants.TAG_AUTH, "description": "认证"},
         ],
     )
 
@@ -82,12 +83,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, tags=[constants.TAG_HEALTH])
     app.include_router(api_router)
 
-    # ---------- dev 专用路由（演示 token 签发）----------
-    # 不进 prod：谁都能拿 token 的端点不能出现在公网应用上。
-    if settings.env != "prod":
-        from kb_service.api.v1 import dev
-
-        app.include_router(dev.router, prefix="/api/v1", tags=["dev"])
+    # dev/token 后门已拆（W8-D2）：签票只走 /auth/login——验真票、验密码，不白给。
 
     # ---------- 演示页面 ----------
     # 挂在 "/" 且必须放在所有 API 路由之后：Starlette 按注册顺序匹配，

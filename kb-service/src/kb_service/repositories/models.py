@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from kb_service.repositories.rows import DocRow, KBRow, UserRow
+from kb_service.repositories.rows import DocRow, KBRow, UserCredentialsRow, UserRow
 
 
 class Base(DeclarativeBase):
@@ -119,4 +119,10 @@ class User(Base):
             role=self.role,
             is_banned=self.is_banned,
             created_at=self.created_at,
+        )
+
+    def to_credentials_row(self) -> UserCredentialsRow:
+        return UserCredentialsRow(
+            id=self.id,
+            password_hash=self.password_hash,
         )

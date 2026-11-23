@@ -183,6 +183,20 @@
     z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,.25);
   }
   #toast.err { background: var(--err); }
+  /* 登录/注册弹层 */
+  #authOverlay {
+    position: fixed; inset: 0; background: rgba(16,22,43,.55); backdrop-filter: blur(3px);
+    display: none; place-items: center; z-index: 60;
+  }
+  #authOverlay.show { display: grid; }
+  .auth-card {
+    background: var(--panel); border-radius: var(--radius); padding: 26px; width: 340px;
+    box-shadow: var(--shadow); display: grid; gap: 10px;
+  }
+  .auth-card h2 { margin: 0 0 4px; font-size: 16px; }
+  .auth-switch { font-size: 12px; color: var(--muted); text-align: center; }
+  .auth-switch a { color: var(--accent); cursor: pointer; margin-left: 4px; }
+  .auth-err { color: var(--err); font-size: 12px; min-height: 16px; text-align: center; }
   #demoStrip {
     position: fixed; right: 18px; bottom: 18px; width: 300px; display: none; z-index: 40;
     background: #10162b; color: #cbd5e1; border-radius: 12px; padding: 12px 14px;
@@ -285,6 +299,17 @@
   </div>
 </main>
 
+<div id="authOverlay">
+  <div class="auth-card">
+    <h2 id="authTitle">登录</h2>
+    <input id="authEmail" placeholder="邮箱" maxlength="320" autocomplete="email">
+    <input id="authPassword" type="password" placeholder="密码（≥8 位，注册/登录同一框）" maxlength="200">
+    <button id="authSubmit">登录</button>
+    <div class="auth-switch"><span id="authHint">没有账号？</span><a id="authToggle">去注册</a></div>
+    <div class="auth-err" id="authErr"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 <div id="demoStrip">
   <h3>▶ 演示剧本进行中</h3>
@@ -330,7 +355,7 @@ async function api(method, path, body) {
       const j = await resp.json();
       if (j.message) msg = j.message;
     } catch (_) { /* 204 或非 JSON */ }
-    if (resp.status === 401) { setAuth(null, null); msg = "未登录或凭证过期，请重新签发 token"; }
+    if (resp.status === 401) { setAuth(null, null); showAuth(); msg = "未登录或登录已过期，请重新登录"; }
     throw new Error(msg);
   }
   return resp.status === 204 ? null : resp.json();
@@ -363,14 +388,49 @@ async function pingHealth() {
   }
 }
 
-// ---------- 登录 ----------
-async function login() {
-  try {
-    const j = await api("POST", "/api/v1/dev/token", {});
-    setAuth(j.access_token, j.user_id);
-    loadKbs();
-  } catch (e) { toast(e.message, true); }
+// ---------- 登录/注册（真后门已拆，走 /auth/login 换真票） ----------
+// TokenOut 不带用户身份，前端解码 JWT 的 payload 拿 sub 来显示——
+// 这是"读"，不是"验"：真正的验签在后端，前端解码仅用于展示。
+function decodeJwtSub(t) {
+  const payload = t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+  return JSON.parse(atob(payload)).sub;
 }
+
+let authMode = "login";
+function showAuth() { $("authOverlay").classList.add("show"); $("authErr").textContent = ""; }
+function hideAuth() { $("authOverlay").classList.remove("show"); }
+
+function toggleAuthMode() {
+  authMode = authMode === "login" ? "register" : "login";
+  $("authTitle").textContent = authMode === "login" ? "登录" : "注册";
+  $("authSubmit").textContent = authMode === "login" ? "登录" : "注册并登录";
+  $("authHint").textContent = authMode === "login" ? "没有账号？" : "已有账号？";
+  $("authToggle").textContent = authMode === "login" ? "去注册" : "去登录";
+  $("authErr").textContent = "";
+}
+
+async function submitAuth() {
+  const email = $("authEmail").value.trim();
+  const password = $("authPassword").value;
+  if (!email || !password) { $("authErr").textContent = "邮箱和密码都要填"; return; }
+  $("authSubmit").disabled = true;
+  try {
+    if (authMode === "register") {
+      await api("POST", "/api/v1/auth/register", { email, password });  // 201 后自动登录
+    }
+    const j = await api("POST", "/api/v1/auth/login", { email, password });
+    setAuth(j.access_token, decodeJwtSub(j.access_token));
+    hideAuth();
+    loadKbs();
+  } catch (e) {
+    $("authErr").textContent = e.message;   // 401 统一文案 / 409 已注册 / 422 格式错，都在这显示
+  }
+  $("authSubmit").disabled = false;
+}
+
+$("authSubmit").onclick = submitAuth;
+$("authToggle").onclick = toggleAuthMode;
+$("authPassword").addEventListener("keydown", (e) => { if (e.key === "Enter") submitAuth(); });
 
 // ---------- 知识库 ----------
 async function loadKbs() {
@@ -614,8 +674,8 @@ $("demoBtn").onclick = async () => {
   const mark = (i, cls) => { steps[i].className = cls; };
   steps.forEach((li) => (li.className = ""));
   try {
-    // 0 准备登录
-    if (!token) await login();
+    // 0 准备登录（真票：没登录就弹登录框，不再白给 token）
+    if (!token) { showAuth(); throw new Error("请先登录，再跑演示剧本"); }
     // 1 建库
     // 名字带时间戳：UNIQUE(owner_id, name) 这条约束是真的，重复演示不能撞它
     const demoName = "演示知识库 " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
@@ -693,7 +753,7 @@ $("demoBtn").onclick = async () => {
 window.addEventListener("DOMContentLoaded", () => {
   pingHealth();
   setInterval(pingHealth, 15000);
-  login();
+  showAuth();   // 进页面先见登录框——不再自动发 token
 });
 </script>
 </body>

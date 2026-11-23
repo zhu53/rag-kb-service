@@ -517,6 +517,15 @@ wheels = [
 ]
 
 [[package]]
+name = "dnspython"
+version = "2.9.2"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/76/49/900383b471c645a3c397f47b3211d1fcecb3a540c98f683494cdf86b33de/dnspython-2.9.2.tar.gz", hash = "sha256:8d4d39a513e649d634004ce4d39ade2352efcea472a0247535a5c2d18a9d7ba9", size = 455484, upload-time = "2026-11-03T23:56:53.601Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/1e/0c/5346358b3a20275d256978c35203ddc2c8617f78c1b23795b79ba22ced6d/dnspython-2.9.2-py3-none-any.whl", hash = "sha256:af15f7d385a6ae2fb35a796fde2138004c8c42c7389090e2addc83e3b3340fd8", size = 360455, upload-time = "2026-11-03T23:56:52.088Z" },
+]
+
+[[package]]
 name = "ecdsa"
 version = "0.19.2"
 source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
@@ -526,6 +535,19 @@ dependencies = [
 sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/25/ca/8de7744cb3bc966c85430ca2d0fcaeea872507c6a4cf6e007f7fe269ed9d/ecdsa-0.19.2.tar.gz", hash = "sha256:62635b0ac1ca2e027f82122b5b81cb706edc38cd91c63dda28e4f3455a2bf930", size = 202432, upload-time = "2026-03-26T09:58:17.675Z" }
 wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/51/79/119091c98e2bf49e24ed9f3ae69f816d715d2904aefa6a2baa039a2ba0b0/ecdsa-0.19.2-py2.py3-none-any.whl", hash = "sha256:840f5dc5e375c68f36c1a7a5b9caad28f95daa65185c9253c0c08dd952bb7399", size = 150818, upload-time = "2026-03-26T09:58:15.808Z" },
+]
+
+[[package]]
+name = "email-validator"
+version = "2.4.0"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+dependencies = [
+    { name = "dnspython" },
+    { name = "idna" },
+]
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/c0/4d/f5e9d9de19f4b8f9e33d802fe3efb0ef96e88d4d6d45d604f335bef2f1ef/email_validator-2.4.0.tar.gz", hash = "sha256:be487bc50bc3bd832a98515a55a15649d9bec06d954fa178663190714b6c4ee1", size = 55168, upload-time = "2026-11-14T20:21:28.125Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/b8/8b/99e715c59560afa0bf68f21ed16eec794d94293945f57934b70c5255d741/email_validator-2.4.0-py3-none-any.whl", hash = "sha256:4454e41c4e1c6b6caee34a1dc71d5e736791562be8fd179b02e298f796522684", size = 36810, upload-time = "2026-11-14T20:21:27.14Z" },
 ]
 
 [[package]]
@@ -735,10 +757,11 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "bcrypt" },
     { name = "cryptography" },
+    { name = "email-validator" },
     { name = "fastapi" },
     { name = "httpx" },
-    { name = "passlib", extra = ["bcrypt"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pymysql" },
@@ -758,16 +781,16 @@ dev = [
     { name = "pytest-cov" },
     { name = "respx" },
     { name = "ruff" },
-    { name = "types-passlib" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
+    { name = "bcrypt", specifier = ">=4.1" },
     { name = "cryptography", specifier = ">=50.0.2" },
+    { name = "email-validator", specifier = ">=2.4.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "pymysql", specifier = ">=1.2.4" },
@@ -787,7 +810,6 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.0" },
     { name = "respx", specifier = ">=0.23.1" },
     { name = "ruff", specifier = ">=0.8" },
-    { name = "types-passlib" },
 ]
 
 [[package]]
@@ -1143,20 +1165,6 @@ source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
 sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79", size = 313412, upload-time = "2026-08-04T18:15:28.737Z" }
 wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl", hash = "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c", size = 129956, upload-time = "2026-08-04T18:15:27.159Z" },
-]
-
-[[package]]
-name = "passlib"
-version = "1.7.4"
-source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
-sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/b6/06/9da9ee59a67fae7761aab3ccc84fa4f3f33f125b370f1ccdb915bf967c11/passlib-1.7.4.tar.gz", hash = "sha256:defd50f72b65c5402ab2c573830a6978e5f202ad0d984793c8dde2c4152ebe04", size = 689844, upload-time = "2020-10-08T19:00:52.121Z" }
-wheels = [
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/3b/a4/ab6b7589382ca3df236e03faa71deac88cae040af60c071a78d254a62172/passlib-1.7.4-py2.py3-none-any.whl", hash = "sha256:aa6bca462b8d8bda89c70b382f0c298a20b5560af6cbfa2dce410c0a2fb669f1", size = 525554, upload-time = "2020-10-08T19:00:49.856Z" },
-]
-
-[package.optional-dependencies]
-bcrypt = [
-    { name = "bcrypt" },
 ]
 
 [[package]]
@@ -1784,15 +1792,6 @@ wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/1c/b8/63a75cfb27a17c38550e44025d3a6e7be64516fd8608a3b75703bf37d81b/tomli-2.5.0-cp315-cp315t-win_amd64.whl", hash = "sha256:f3fcbc57b1791fa6cbe5d8434179d51de12be1a4811469529f47f6e7487a2571", size = 117281, upload-time = "2026-10-07T12:23:34.648Z" },
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/72/01/e8c1debb2173973372934c68fc8e46170ab60ef23ed4592dff4dec6e8993/tomli-2.5.0-cp315-cp315t-win_arm64.whl", hash = "sha256:d2ba24db8a9376921b5e87b4762b9adb0f3f1deaea68f2b8b0bb2c11efb9c3e7", size = 115069, upload-time = "2026-10-07T12:23:35.77Z" },
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/60/3f/3e3f8fd0919249b0200c80fbc4f9a1e70be19f9883da71dfb7f8b9ab8aca/tomli-2.5.0-py3-none-any.whl", hash = "sha256:32a7b79ac57a2e83670ce329ccf675798bc5a2094783a63676866b70503f2e2b", size = 14765, upload-time = "2026-10-07T12:23:36.875Z" },
-]
-
-[[package]]
-name = "types-passlib"
-version = "1.7.7.20260211"
-source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
-sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/b5/f4/718ff8cbef9366e597aefd58929321702d3e183998cea89949ab5423281f/types_passlib-1.7.7.20260211.tar.gz", hash = "sha256:af73afffe1ce94c95c7f6072bd261572c29845de74fdffa3a265fc7634bca056", size = 25666, upload-time = "2026-02-10T15:11:59.517Z" }
-wheels = [
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/14/6a/e9fc6a5b8f9a380a4a56b9f1e4dba5c6899561868017b17f6de382808b6f/types_passlib-1.7.7.20260211-py3-none-any.whl", hash = "sha256:c0f1ad440c513a6c07f333b28249530686056fd54a7b3ac6128ae31fd46305d3", size = 40457, upload-time = "2026-02-10T15:11:58.647Z" },
 ]
 
 [[package]]
