@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from uuid import UUID
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
 
-from kb_service.core.exceptions import UnauthorizedError
+from kb_service.core.db import get_db
+from kb_service.core.exceptions import ForbiddenError, UnauthorizedError
 from kb_service.core.security import decode_access_token
+from kb_service.repositories.rows import UserRow
+from kb_service.repositories.user_repo import UserRepository
 
 # HTTPBearer 让 OpenAPI 文档自动生成 Authorize 按钮（右上角 🔓），
 # 在 /docs 里填 token 后，所有接口会自动带上 Authorization 头。
@@ -19,23 +24,37 @@ _bearer_scheme = HTTPBearer(
 )
 
 
-async def get_current_user_id(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
-) -> UUID:
-    """从 `Authorization: Bearer <token>` 解析当前用户。
-
-    依赖 HTTPBearer 安全方案：
-    - /docs 右上角出现 Authorize 按钮（这就是你之前找不到它的原因）
-    - 头缺失/格式错时返回 None，由这里抛业务异常（保证错误响应格式统一）
-    - 校验通过后返回 credentials.credentials（即纯 token 字符串）
-
-    W8 TODO：换成 OAuth2PasswordBearer + 用户表校验（校验用户是否存在/是否被封禁）。
-    """
+    session: Session = Depends(get_db),
+) -> UserRow:
     if credentials is None:
         raise UnauthorizedError("缺少认证信息")
-    # HTTPBearer 已校验 scheme 必须是 Bearer，这里只需处理 token 本身
     claims = decode_access_token(credentials.credentials)
     try:
-        return UUID(claims.sub)
+        user_id = UUID(claims.sub)
     except ValueError as exc:
         raise UnauthorizedError("凭证 subject 不是合法用户") from exc
+
+    row = UserRepository(session).get(user_id)
+    if row is None:
+        raise UnauthorizedError("用户不存在")
+    if row["is_banned"]:
+        raise UnauthorizedError("账号已被封禁")
+    return row
+
+
+def require_role(*roles: str) -> Callable[..., Awaitable[UserRow]]:
+    """依赖工厂：返回一个 FastAPI 依赖函数 (闭包记住要求的角色)。
+
+    返回类型写 `Callable[..., Awaitable[UserRow]]` 而不是 `Callable[[], ...]`：
+    内层参数的默认值是 `Depends(...)`，FastAPI 会自己注入，调用方"可以不传"，
+    所以参数列表是"任意（此处恰好 0 个）"。
+    """
+
+    async def _check(user: UserRow = Depends(get_current_user)) -> UserRow:
+        if user["role"] not in roles:
+            raise ForbiddenError("权限不足")
+        return user
+
+    return _check

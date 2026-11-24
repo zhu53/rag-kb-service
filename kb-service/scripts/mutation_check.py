@@ -19,9 +19,13 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# pytest 每轮的临时目录钉在项目内（不污染系统 temp），且每轮一个新名字，
+# 见 run_tests 的说明：避免批量删除被宿主钩子拦截导致"全绿但 rc=1"。
+BASE_TMP = ROOT / "scratch" / "pytest-tmp"
 
 # (文件, 原文, 变异后, 这个变异在模拟什么 bug)
 MUTANTS: list[tuple[str, str, str, str]] = [
@@ -91,10 +95,13 @@ BLIND_SPOTS: list[tuple[str, str, str, str]] = [
     # ---- 第 2 类：缓存误用 ----
     (
         "src/kb_service/api/v1/knowledge_bases.py",
-        "    kb_id: UUID,\n    user_id: UUID = Depends(get_current_user_id),\n"
+        "    kb_id: UUID, user: UserRow = Depends(get_current_user),"
+        " session: Session = Depends(get_db)\n"
         ") -> ApiResponse[KBOut]:",
-        "    kb_id: UUID,\n    user_id: UUID = Depends(get_current_user_id),\n"
-        "    _dup: UUID = Depends(get_current_user_id, use_cache=False),\n"
+        "    kb_id: UUID,\n"
+        "    user: UserRow = Depends(get_current_user),\n"
+        "    _dup: UserRow = Depends(get_current_user, use_cache=False),\n"
+        "    session: Session = Depends(get_db),\n"
         ") -> ApiResponse[KBOut]:",
         "依赖缓存误用：同一请求里验两次 token（use_cache=False）",
     ),
@@ -121,15 +128,32 @@ BLIND_SPOTS: list[tuple[str, str, str, str]] = [
 ]
 
 
-def run_tests() -> int:
-    """跑一遍测试，返回退出码。--no-cov 让每次跑快一点。"""
-    proc = subprocess.run(
-        [sys.executable, "-m", "pytest", "-x", "-q", "--no-cov", "-p", "no:cacheprovider"],
+def run_tests() -> subprocess.CompletedProcess[str]:
+    """跑一遍测试。--no-cov 让每次跑快一点。
+
+    `--basetemp` 每轮给一个全新目录：pytest 默认会在系统 temp 里轮转
+    `pytest-of-<user>/pytest-N`，每次轮转都要批量删旧目录——宿主的安全删除钩子
+    会在累计删除数过阈值后拦截（SAFE_DELETE_BULK_CONFIRM_REQUIRED），
+    于是**测试全绿但退出码 1**。给固定新目录后不再轮转删除，rc 才是真读数。
+    """
+    BASE_TMP.mkdir(parents=True, exist_ok=True)
+    basetemp = BASE_TMP / f"run-{uuid.uuid4().hex[:8]}"
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-x",
+            "-q",
+            "--no-cov",
+            "-p",
+            "no:cacheprovider",
+            f"--basetemp={basetemp}",
+        ],
         cwd=ROOT,
         capture_output=True,
         text=True,
     )
-    return proc.returncode
 
 
 def mutate_and_test(path_str: str, old: str, new: str, label: str) -> int | None:
@@ -142,7 +166,14 @@ def mutate_and_test(path_str: str, old: str, new: str, label: str) -> int | None
         return None
     try:
         path.write_bytes(original.replace(old, new).encode("utf-8"))
-        return run_tests()
+        proc = run_tests()
+        if proc.returncode != 0:
+            # 打到失败尾行：否则"被杀死"只是一个结论，看不出是断言红还是环境红
+            tail = [ln for ln in proc.stdout.splitlines() if ln.strip()][-3:]
+            print(f"       ↳ rc={proc.returncode} " + " ｜ ".join(tail))
+            if proc.stderr.strip():
+                print("       ↳ stderr: " + proc.stderr.strip().splitlines()[-1][:200])
+        return proc.returncode
     finally:
         path.write_bytes(original.encode("utf-8"))
 
@@ -154,6 +185,10 @@ def run_group(title: str, mutants: list[tuple[str, str, str, str]], expect_kill:
     for path_str, old, new, label in mutants:
         code = mutate_and_test(path_str, old, new, label)
         if code is None:
+            # 锚点失效必须算失败：否则重构改了签名，变异体静默不跑，
+            # 脚本照样打印"变异得分 100%"，盲区探针变成空转。（2026-11-24 实测踩到）
+            print(f"[锚点失效] {label} —— 源码变了，变异模板要跟着改")
+            mismatched.append(f"{label}（锚点失效，未真正注入）")
             continue
         killed = code != 0
         if expect_kill:
@@ -169,7 +204,7 @@ def run_group(title: str, mutants: list[tuple[str, str, str, str]], expect_kill:
 
 def main() -> int:
     print("基线：先确认原始代码是绿的 ……", end=" ", flush=True)
-    if run_tests() != 0:
+    if run_tests().returncode != 0:
         print("红！源码本身有问题，先修好再变异。")
         return 2
     print("绿")

@@ -37,3 +37,12 @@ class UserOut(BaseModel):
     email: EmailStr
     role: str
     created_at: datetime
+
+
+class UserAdminOut(UserOut):
+    """admin 视角多一个 is_banned：封禁状态只有管理员需要看。
+
+    继承而非往 UserOut 上加字段——注册响应不该多带一个永远是 False 的字段。
+    """
+
+    is_banned: bool

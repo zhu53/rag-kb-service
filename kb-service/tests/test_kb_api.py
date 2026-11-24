@@ -1,6 +1,27 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from kb_service.core.security import create_access_token
+from kb_service.repositories.models import User
+
+_OTHER_USER_ID = UUID(int=99)
+
+
+def _make_other_user(db: Session) -> dict[str, str]:
+    """造一个真实存在的"别人"：D3 起查库验人，幽灵用户会被 401 挡在门外。"""
+    db.add(
+        User(
+            id=_OTHER_USER_ID,
+            email="other@example.com",
+            password_hash="x" * 60,
+        )
+    )
+    db.flush()
+    return {"Authorization": f"Bearer {create_access_token(str(_OTHER_USER_ID))}"}
 
 
 def test_kb_crud_flow(client: TestClient) -> None:
@@ -100,14 +121,11 @@ def test_count_kbs(client: TestClient) -> None:
     assert resp.json() == {"count": 3}
 
 
-def test_count_kbs_excludes_other_users(client: TestClient) -> None:
+def test_count_kbs_excludes_other_users(client: TestClient, db: Session) -> None:
     """别人的知识库不该被计入。"""
-    from uuid import UUID
-
-    from kb_service.core.security import create_access_token
+    other = _make_other_user(db)
 
     client.post("/api/v1/kbs", json={"name": "mine"})
-    other = {"Authorization": f"Bearer {create_access_token(str(UUID(int=99)))}"}
 
     assert client.get("/api/v1/kbs/stats/count").json() == {"count": 1}
     assert client.get("/api/v1/kbs/stats/count", headers=other).json() == {"count": 0}

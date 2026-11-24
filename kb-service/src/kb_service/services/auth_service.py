@@ -32,4 +32,6 @@ class AuthService:
             raise UnauthorizedError("邮箱或密码错误")
         if not verify_password(data.password, row["password_hash"]):
             raise UnauthorizedError("邮箱或密码错误")
+        if row["is_banned"]:
+            raise UnauthorizedError("邮箱或密码错误")
         return create_access_token(str(row["id"]))

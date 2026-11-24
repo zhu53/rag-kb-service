@@ -6,9 +6,10 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.orm import Session
 
-from kb_service.api.deps import get_current_user_id
+from kb_service.api.deps import get_current_user
 from kb_service.core.db import get_db
 from kb_service.repositories.doc_repo import DocRepository
+from kb_service.repositories.rows import UserRow
 from kb_service.schemas.common import PageParams
 from kb_service.schemas.doc import DocCreate, DocOut
 from kb_service.schemas.kb import Page
@@ -23,10 +24,10 @@ async def create_doc(
     kb_id: UUID,
     body: DocCreate,
     background_tasks: BackgroundTasks,
-    user_id: UUID = Depends(get_current_user_id),
+    user: UserRow = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> DocOut:
-    doc = DocService(DocRepository(session), session=session).create(kb_id, user_id, body)
+    doc = DocService(DocRepository(session), session=session).create(kb_id, user["id"], body)
     background_tasks.add_task(run_index, doc.id, body.content)
     return doc
 
@@ -35,11 +36,11 @@ async def create_doc(
 async def list_docs(
     kb_id: UUID,
     params: Annotated[PageParams, Depends()],
-    user_id: UUID = Depends(get_current_user_id),
+    user: UserRow = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> Page[DocOut]:
     return DocService(DocRepository(session), session=session).list(
-        kb_id, user_id, params.page, params.size
+        kb_id, user["id"], params.page, params.size
     )
 
 
@@ -47,10 +48,10 @@ async def list_docs(
 async def get_doc(
     kb_id: UUID,
     doc_id: UUID,
-    user_id: UUID = Depends(get_current_user_id),
+    user: UserRow = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> DocOut:
-    return DocService(DocRepository(session), session=session).get(doc_id, user_id)
+    return DocService(DocRepository(session), session=session).get(doc_id, user["id"])
 
 
 @router.delete(
@@ -61,7 +62,7 @@ async def get_doc(
 async def delete_doc(
     kb_id: UUID,
     doc_id: UUID,
-    user_id: UUID = Depends(get_current_user_id),
+    user: UserRow = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> None:
-    DocService(DocRepository(session), session=session).delete(doc_id, user_id)
+    DocService(DocRepository(session), session=session).delete(doc_id, user["id"])

@@ -10,11 +10,10 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from kb_service.api.deps import get_current_user_id
 from kb_service.core.db import get_db
 from kb_service.core.security import create_access_token
 from kb_service.main import create_app
-from kb_service.repositories.models import Base
+from kb_service.repositories.models import Base, User
 
 TEST_USER_ID = UUID("11111111-1111-4111-8111-111111111111")
 
@@ -55,6 +54,20 @@ def db(app: FastAPI, db_engine: Engine) -> Iterator[Session]:
 
     session = sessionmaker(bind=db_engine, expire_on_commit=False)()
 
+    # D3 起鉴权走真链路：get_current_user 拿 token 里的 sub 查库验人。
+    # auth_headers 的 token 指向 TEST_USER_ID，库里必须真有这个人，
+    # 否则所有带凭证的请求都会 401「用户不存在」。
+    # password_hash 是占位串——测试里没人验证密码，登录走的是 auth_service 不走这里。
+    session.add(
+        User(
+            id=TEST_USER_ID,
+            email="seed@example.com",
+            password_hash="x" * 60,
+            role="member",
+        )
+    )
+    session.flush()
+
     # 必须写成生成器函数：FastAPI 靠 inspect.isgeneratorfunction 判定
     # "这是 yield 型依赖，请求结束后要执行它 finally 之后的部分"。
     # 写成 lambda: iter([session]) 会被当成普通依赖，注入进去的是个迭代器。
@@ -86,15 +99,3 @@ def app() -> FastAPI:
 def client(app: FastAPI, auth_headers: dict[str, str]) -> Iterator[TestClient]:
     with TestClient(app, headers=auth_headers) as c:
         yield c
-
-
-@pytest.fixture
-def override_current_user_id(app: FastAPI) -> Iterator[UUID]:
-    """把 get_current_user_id 换成固定用户；结束只摘自己这条 override，不动其他。"""
-
-    async def fake_user_id() -> UUID:
-        return TEST_USER_ID
-
-    app.dependency_overrides[get_current_user_id] = fake_user_id
-    yield TEST_USER_ID
-    app.dependency_overrides.pop(get_current_user_id, None)

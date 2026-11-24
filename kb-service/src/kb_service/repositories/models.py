@@ -125,4 +125,5 @@ class User(Base):
         return UserCredentialsRow(
             id=self.id,
             password_hash=self.password_hash,
+            is_banned=self.is_banned,
         )

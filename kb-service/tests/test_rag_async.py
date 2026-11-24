@@ -10,8 +10,10 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.orm import Session
+from tests.conftest import TEST_USER_ID
 from tests.fakes import FakeKBRepo, make_kb_row
 
+from kb_service.core.security import create_access_token
 from kb_service.main import create_app
 from kb_service.repositories.doc_repo import DocRepository
 from kb_service.repositories.kb_repo import KBRepository
@@ -102,24 +104,27 @@ async def test_answer_stream_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_chat_sse_via_async_client(
     app: FastAPI,
     db: Session,
-    override_current_user_id: UUID,
 ) -> None:
     """集成：先在库里种一个 kb + 一篇文档，再走真实路由。
 
     和上一版的关键差别：数据种在 **db**（与 get_db 的 override 同一个 session），
     不是种在内存 store。种错地方的话，路由查库什么都查不到，测试会静默变成
     测"空知识库"——那种失败很难看出是数据没进去还是检索坏了。
+
+    D3 起鉴权走真链路（get_current_user 查库），这里带上 conftest seed 用户
+    的真 token；原来那条 override_current_user_id 已删除（它绕过的正是查库）。
     """
 
-    kb_id = KBRepository(db).create(override_current_user_id, KBCreate(name="测试库"))["id"]
+    kb_id = KBRepository(db).create(TEST_USER_ID, KBCreate(name="测试库"))["id"]
     DocRepository(db).create(
         kb_id, DocCreate(title="测试文档", content="RAG 是检索增强生成，先检索再生成。")
     )
     db.commit()
 
+    headers = {"Authorization": f"Bearer {create_access_token(str(TEST_USER_ID))}"}
     transport = ASGITransport(app=app)
     async with (
-        AsyncClient(transport=transport, base_url="http://test") as client,
+        AsyncClient(transport=transport, base_url="http://test", headers=headers) as client,
         client.stream(
             "POST",
             "/api/v1/chat",

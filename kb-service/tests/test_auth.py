@@ -19,7 +19,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from kb_service.repositories.models import User
 
@@ -60,6 +60,31 @@ def test_wrong_password_returns_401(client: TestClient) -> None:
     assert r.status_code == 401, f"密码错必须 401：{r.text[:300]}"
 
 
+def test_banned_user_login_401_same_as_wrong_password(client: TestClient, db: Session) -> None:
+    """D3 交付物 2 守门测试：封禁用户凭**正确密码**登录必须 401，
+    且文案与"密码错"逐字一致（防探测——不能让攻击者靠响应体区分两种失败）。
+
+    is_banned 没有管理端接口（那是 D3 教材里"管理员"未来的活），
+    所以直接改库：用注入路由的同一个 session 改 + commit。
+    """
+    client.post(REGISTER, json=PAYLOAD)
+
+    user = db.scalar(select(User).where(User.email == PAYLOAD["email"]))
+    assert user is not None
+    user.is_banned = True
+    db.commit()
+
+    r_banned = client.post(LOGIN, json={"email": PAYLOAD["email"], "password": PAYLOAD["password"]})
+    r_wrong = client.post(LOGIN, json={"email": PAYLOAD["email"], "password": "nope"})
+
+    assert r_banned.status_code == 401, (
+        f"封禁用户登录必须 401（不是 {r_banned.status_code}）——口子没堵上：{r_banned.text[:300]}"
+    )
+    assert r_banned.json() == r_wrong.json(), (
+        "封禁文案与密码错不一致——攻击者能靠响应体探测出『这个邮箱被封了』"
+    )
+
+
 def test_unknown_user_same_response_as_wrong_password(client: TestClient) -> None:
     """时序侧信道的守门测试：两种失败的状态码和响应体必须完全一致。"""
     client.post(REGISTER, json=PAYLOAD)
@@ -74,15 +99,18 @@ def test_unknown_user_same_response_as_wrong_password(client: TestClient) -> Non
 
 
 def test_user_visible_in_fresh_session(client: TestClient, db_engine: Engine) -> None:
-    """注册后另开会话能查到——commit 真发生了（W7-D6：本会话看得见不算数）。"""
+    """注册后另开会话能查到——commit 真发生了（W7-D6：本会话看得见不算数）。
+
+    D3 起 conftest seed 了一个占位用户（StaticPool 共享连接，与注册同事务提交），
+    所以按 email 精确查目标行，不依赖行序或总数。
+    """
     r = client.post(REGISTER, json=PAYLOAD)
     assert r.status_code == 201
 
     fresh = sessionmaker(bind=db_engine, expire_on_commit=False)()
     try:
-        users = fresh.scalars(select(User)).all()
-        assert len(users) == 1, f"新 session 应查到 1 个用户，实际 {len(users)}"
-        assert users[0].email == PAYLOAD["email"]
+        user = fresh.scalar(select(User).where(User.email == PAYLOAD["email"]))
+        assert user is not None, "注册用户在新 session 查不到——commit 没真发生"
     finally:
         fresh.close()
 
@@ -92,7 +120,7 @@ def test_password_hash_not_plaintext(client: TestClient, db_engine: Engine) -> N
 
     fresh = sessionmaker(bind=db_engine, expire_on_commit=False)()
     try:
-        user = fresh.scalar(select(User))
+        user = fresh.scalar(select(User).where(User.email == PAYLOAD["email"]))
         assert user is not None
         assert user.password_hash.startswith("$2b$"), (
             f"库里存的可能不是 bcrypt 哈希：{user.password_hash[:20]}"

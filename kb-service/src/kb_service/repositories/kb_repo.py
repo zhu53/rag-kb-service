@@ -78,6 +78,10 @@ class KBRepository:
         # name=None 在 schema 层已拦成 422，能进到这里的是"真正的更新"。
         for k, v in payload.items():
             setattr(obj, k, v)
+        # 债④：不 flush 就取快照，`updated_at` 的 onupdate 还没跑，带出去的是旧值
+        # （实测 PATCH 回显比库里早 15ms）。flush 把 UPDATE 发出去，onupdate 生成的新值
+        # 才回到对象属性上；commit 仍是 service 层的事。
+        self.session.flush()
         return obj.to_row()
 
     def delete(self, kb_id: UUID) -> bool:

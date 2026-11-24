@@ -55,3 +55,4 @@ class UserCredentialsRow(TypedDict):
 
     id: UUID
     password_hash: str
+    is_banned: bool

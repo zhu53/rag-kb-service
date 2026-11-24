@@ -11,7 +11,7 @@ from kb_service.schemas.doc import DocCreate
 
 
 class DocRepository:
-    """文档数据访问层。W7 TODO：换成 SQLAlchemy。"""
+    """文档数据访问层（W7 已完成从内存 store 迁到 SQLAlchemy，TODO 销账）。"""
 
     def __init__(self, session: Session) -> None:
         self.session = session
