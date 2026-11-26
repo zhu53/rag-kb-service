@@ -360,8 +360,8 @@ cd kb-service && ./.venv/Scripts/python.exe scripts/check.py
 
 ## §十一 收尾清单
 
-- [ ] 交付物 0–5 全部闭环，`tests/test_refresh.py` 变异验证红→绿
-- [ ] §八 8 题闭卷作答 + 判卷（进 `week8/总结/`）
-- [ ] 清债槽 ⑥：`doc_count` 一致性测试（计划原定 D4 槽，30 min）
+- [x] 交付物 0–5 全部闭环，`tests/test_refresh.py` 变异验证红→绿（logout 三变异、计数器三变异全杀）
+- [x] §八 8 题闭卷作答 + 判卷（进 `week8/总结/`）
+- [x] 清债槽 ⑥：`doc_count` 一致性测试（`test_db_integration.py` +3 helper/2 用例，A/B/C 三变异）
 - [ ] 巡检：W6 中间件-依赖-异常顺序（**当天学完内容后做**，出红不追新进度）
 - [ ] 每日重写 10 min：今天从 `auth_service.login`（12 行）开始——它是你要改的函数，先重写一遍旧版再动手改新版，差距就是你今天要学的东西

@@ -142,3 +142,109 @@ def test_document_chunks_and_counter_commit_together() -> None:
     assert doc["chunk_count"] == 4
     assert chunk_rows == 4, "chunks 表没写（_parse_sync 没调 add_chunks？）"
     assert doc_count == 1, "doc_count 没自增（incr_doc_count 没在事务里？）"
+
+
+# --- 清债 ⑥：doc_count 一致性 ------------------------------------------------
+
+
+def _read_counter(kb_id: UUID) -> int:
+    """另开连接读计数器：本会话 identity map 看得见不算数（W7 教训）。"""
+    with engine.connect() as conn:
+        value = conn.execute(
+            text("SELECT doc_count FROM knowledge_bases WHERE id = :kb"), {"kb": kb_id.hex}
+        ).scalar_one()
+    return int(value)
+
+
+def _count_documents(kb_id: UUID) -> int:
+    with engine.connect() as conn:
+        value = conn.execute(
+            text("SELECT COUNT(*) FROM documents WHERE kb_id = :kb"), {"kb": kb_id.hex}
+        ).scalar_one()
+    return int(value)
+
+
+def _assert_counter_conserves(kb_id: UUID, step: str) -> None:
+    """守恒断言：计数器 == 源数据行数。
+
+    不写成 `assert doc_count == 3`：硬编码测的是"这次跑出来的数对不对"，
+    守恒测的是"这个不变量有没有被破坏"。前者在改 chunk 参数、加软删除时假红，
+    后者只在真漂移时红。
+    """
+    counter = _read_counter(kb_id)
+    actual = _count_documents(kb_id)
+    assert counter == actual, (
+        f"{step}：doc_count={counter}，但 documents 实际 {actual} 行——计数器漂了"
+    )
+
+
+def test_document_delete_decrements_counter() -> None:
+    """删文档：行真删了 + doc_count 跟着 -1。
+
+    变异体：删掉 `doc_service.delete` 里的 `incr_doc_count(row["kb_id"], -1)` → 本用例必红。
+    """
+    kb_id: UUID
+    doc_id: UUID
+
+    s1 = maker()
+    try:
+        kb_id = KBService(KBRepository(s1), session=s1).create(OWNER, KBCreate(name="集成-库C")).id
+        doc_id = (
+            DocService(DocRepository(s1), session=s1, kb_repo=KBRepository(s1))
+            .create(kb_id, OWNER, DocCreate(title="集成-待删", content="删我" * 20))
+            .id
+        )
+    finally:
+        s1.close()
+
+    assert _count_documents(kb_id) == 1, "传完一篇 documents 应有 1 行"
+    assert _read_counter(kb_id) == 1, "传完一篇 doc_count 应为 1"
+
+    s2 = maker()
+    try:
+        DocService(DocRepository(s2), session=s2, kb_repo=KBRepository(s2)).delete(doc_id, OWNER)
+    finally:
+        s2.close()
+
+    assert _count_documents(kb_id) == 0, "文档行没删掉——delete 里的 commit 漏了？"
+    assert _read_counter(kb_id) == 0, "行删了但 doc_count 没 -1（incr_doc_count(delta=-1) 未执行）"
+
+
+def test_doc_count_conserves_against_actual_rows() -> None:
+    """造 3 → 删 1 → 全删，每一步 doc_count 都必须等于 documents 的实际行数。
+
+    这比"删一篇 -1"更强：它抓的是任何方向的漂移（多减、少减、忘记减、减错 kb）。
+    """
+    kb_id: UUID
+    ids: list[UUID] = []
+
+    s1 = maker()
+    try:
+        kb_id = KBService(KBRepository(s1), session=s1).create(OWNER, KBCreate(name="集成-库D")).id
+        svc = DocService(DocRepository(s1), session=s1, kb_repo=KBRepository(s1))
+        for i in range(3):
+            created = svc.create(kb_id, OWNER, DocCreate(title=f"守恒-{i}", content="内容" * 20))
+            ids.append(created.id)
+    finally:
+        s1.close()
+
+    _assert_counter_conserves(kb_id, "造 3 篇后")
+
+    s2 = maker()
+    try:
+        DocService(DocRepository(s2), session=s2, kb_repo=KBRepository(s2)).delete(ids[1], OWNER)
+    finally:
+        s2.close()
+
+    _assert_counter_conserves(kb_id, "删中间 1 篇后")
+
+    s3 = maker()
+    try:
+        svc3 = DocService(DocRepository(s3), session=s3, kb_repo=KBRepository(s3))
+        for doc_id in (ids[0], ids[2]):
+            svc3.delete(doc_id, OWNER)
+    finally:
+        s3.close()
+
+    _assert_counter_conserves(kb_id, "全删后")
+    assert _read_counter(kb_id) == 0, "全删完计数器该归零"
