@@ -28,6 +28,7 @@ class LoginIn(BaseModel):
 
 class TokenOut(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     expires_in: int  # 秒；让客户端知道什么时候该续
 
@@ -46,3 +47,8 @@ class UserAdminOut(UserOut):
     """
 
     is_banned: bool
+
+
+class RefreshIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    refresh_token: str

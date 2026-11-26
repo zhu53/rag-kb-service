@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = Field(min_length=16)
     access_token_expire_minutes: int = 60
+    refresh_token_expire_days: int = 7
     algorithm: str = "HS256"
 
     # Database / Cache（W7 启用）

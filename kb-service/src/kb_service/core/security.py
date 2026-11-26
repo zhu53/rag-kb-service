@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import secrets
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import cast
@@ -70,3 +72,11 @@ def decode_access_token(token: str) -> TokenClaims:
         return TokenClaims.model_validate(raw)
     except ValidationError as exc:
         raise UnauthorizedError("凭证载荷不合法") from exc
+
+
+def generate_refresh_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def refresh_token_hash(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
